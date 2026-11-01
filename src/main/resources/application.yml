@@ -2,14 +2,14 @@ spring:
   application:
     name: ${SPRING_APPLICATION_NAME:app}
   datasource:
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:dev}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/challenge?createDatabaseIfNotExist=true}
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     url: ${SPRING_DATASOURCE_WRITER_URL:jdbc:mysql://localhost:3306/challenge?createDatabaseIfNotExist=true}
-    user: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:dev}
+    user: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     enabled: true
 
 
