@@ -286,3 +286,44 @@ Kind also removes its Kubernetes data. Keep Terraform state, plan output, and
 kubeconfigs private: the provider stores cluster credentials in state. State,
 provider downloads, and the project kubeconfig are excluded from Git; the
 provider lockfile is committed.
+
+### MySQL on Kubernetes
+
+`terraform/platform` installs the `crewmeister-mysql` Helm release in the
+`crewmeister` namespace. It uses the public
+[groundhog2k MySQL chart](https://github.com/groundhog2k/helm-charts/tree/master/charts/mysql),
+pinned to chart version `3.1.5`, with the same digest-pinned official MySQL 8.4
+image used for the container check. No chart repository login is required.
+
+Terraform generates separate root and application passwords and creates two
+Kubernetes Secrets. Helm receives only Secret names and key mappings. The
+application account is restricted to the `challenge` database; its Secret does
+not contain the root password. Passwords are not Terraform outputs.
+
+MySQL uses a StatefulSet, an internal ClusterIP service, resource limits, and a
+2 GiB PVC backed by Kind's `standard` storage class. Startup and readiness checks
+authenticate over TCP against the application database. The PVC survives pod
+replacement; it is not intended to survive deletion of the Kind cluster.
+
+After creating the cluster with the setup script, run:
+
+```text
+terraform -chdir=terraform/platform init
+terraform -chdir=terraform/platform apply
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister --namespace crewmeister get pods,pvc,service
+```
+
+The platform providers explicitly use the project kubeconfig and context.
+The provider versions and checksums are committed in the platform lockfile.
+Generated passwords and Secret data remain in local Terraform state, so keep
+state files and plan logs private and preserve state while the database is in use.
+
+Once the platform is deployed, destroy it **before** the cluster:
+
+```text
+terraform -chdir=terraform/platform destroy
+terraform -chdir=terraform/cluster destroy
+```
+
+Platform destruction deletes the project namespace and its database PVC. This
+removes stored data. A new deployment after full teardown generates new passwords.

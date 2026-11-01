@@ -1,0 +1,71 @@
+fullnameOverride: crewmeister-mysql
+
+image:
+  tag: "8.4@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+
+settings:
+  rootPassword:
+    secretKey: password
+  skipTZInfo: true
+
+userDatabase:
+  name:
+    secretKey: database
+  user:
+    secretKey: username
+  password:
+    secretKey: password
+
+storage:
+  requestedSize: 2Gi
+  className: standard
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+
+podSecurityContext:
+  fsGroup: 999
+  seccompProfile:
+    type: RuntimeDefault
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+initResources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Use authenticated TCP checks so the temporary initialization server cannot
+# make MySQL appear ready before its application database exists.
+customStartupProbe:
+  exec:
+    command:
+      - bash
+      - -ec
+      - 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=TCP --host=127.0.0.1 --user="$MYSQL_USER" --database="$MYSQL_DATABASE" --execute="SELECT 1"'
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 60
+
+customReadinessProbe:
+  exec:
+    command:
+      - bash
+      - -ec
+      - 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=TCP --host=127.0.0.1 --user="$MYSQL_USER" --database="$MYSQL_DATABASE" --execute="SELECT 1"'
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
