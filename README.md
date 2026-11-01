@@ -66,3 +66,36 @@ Retrieves a user by ID
 
 Creates a new user
 
+### Running integration tests
+
+Use Java 17 and a running MySQL database named `challenge`. The database account
+must be able to create tables and read and write data. Use a disposable database:
+Flyway applies the schema and inserts the initial user, Alice, with ID 1.
+
+Set both database URLs. The application uses `SPRING_DATASOURCE_URL`, while
+Flyway uses `SPRING_DATASOURCE_WRITER_URL`.
+
+PowerShell:
+
+```powershell
+$env:SPRING_DATASOURCE_URL = 'jdbc:mysql://127.0.0.1:3306/challenge'
+$env:SPRING_DATASOURCE_WRITER_URL = $env:SPRING_DATASOURCE_URL
+$env:SPRING_DATASOURCE_USERNAME = 'crewmeister'
+$env:SPRING_DATASOURCE_PASSWORD = '<local-database-password>'
+.\mvnw.cmd clean verify
+```
+
+Linux / macOS / WSL:
+
+```bash
+export SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:3306/challenge'
+export SPRING_DATASOURCE_WRITER_URL="$SPRING_DATASOURCE_URL"
+export SPRING_DATASOURCE_USERNAME='crewmeister'
+export SPRING_DATASOURCE_PASSWORD='<local-database-password>'
+bash ./mvnw clean verify
+```
+
+Replace the password and connection settings with those of your test database.
+The tests start the application on a random HTTP port, check the migrated user,
+create and retrieve a user through the API, and check application health.
+Test-created users have unique names and are removed after the POST test.
