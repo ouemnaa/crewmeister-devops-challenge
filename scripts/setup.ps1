@@ -23,7 +23,7 @@ try {
     if (Test-Path -LiteralPath .local/bin -PathType Container) {
         $env:PATH = (Join-Path $repoRoot '.local/bin') + [System.IO.Path]::PathSeparator + $env:PATH
     }
-    foreach ($tool in @('docker', 'terraform', 'kind', 'kubectl')) {
+    foreach ($tool in @('docker', 'terraform', 'kind', 'kubectl', 'helm', 'git')) {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
             throw "Required tool is missing: $tool. See the README prerequisites."
         }
@@ -79,8 +79,15 @@ try {
     Invoke-Checked kubectl @('--kubeconfig', $kubeconfig, '--context', $context, 'wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s')
     Invoke-Checked kubectl @('--kubeconfig', $kubeconfig, '--context', $context, 'get', 'nodes')
 
-    Write-Host "Cluster ready. Project kubeconfig: $kubeconfig"
-    Write-Host 'The current setup provisions the cluster only; application deployment follows in the platform stage.'
+    & (Join-Path $PSScriptRoot 'load-image.ps1')
+    Invoke-Checked helm @('lint', 'helm/crewmeister-app', '--strict')
+    Invoke-Checked terraform @('-chdir=terraform/platform', 'init', '-input=false')
+    Invoke-Checked terraform @('-chdir=terraform/platform', 'validate')
+    Invoke-Checked terraform @('-chdir=terraform/platform', 'apply', '-input=false', '-auto-approve', '-var-file=../../.local/image.auto.tfvars.json', "-var=kubeconfig_path=$kubeconfig", "-var=kube_context=$context")
+    Invoke-Checked kubectl @('--kubeconfig', $kubeconfig, '--context', $context, '--namespace', 'crewmeister', 'get', 'pods,pvc,service')
+
+    Write-Host 'Deployment ready. Access the API with:'
+    Write-Host "kubectl --kubeconfig `"$kubeconfig`" --context $context --namespace crewmeister port-forward --address 127.0.0.1 service/crewmeister-app :8080"
 } finally {
     $env:KUBECONFIG = $previousKubeconfig
     $env:KIND_EXPERIMENTAL_PROVIDER = $previousKindProvider

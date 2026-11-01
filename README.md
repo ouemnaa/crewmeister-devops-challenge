@@ -191,8 +191,8 @@ docker network rm crewmeister-container
 ```
 
 Removing the database container with `--volumes` deletes its anonymous data volume.
-Delete the two local environment files after use. This container check precedes
-the Kubernetes deployment; the final setup will use Terraform and Helm.
+Delete the two local environment files after use. The Kubernetes setup below
+uses Terraform and Helm and generates its own database credentials.
 
 ### Local Kubernetes cluster
 
@@ -202,10 +202,10 @@ are reserved on the host. The dedicated kubeconfig is written to
 `.local/crewmeister.kubeconfig`; project commands always specify its context,
 `kind-crewmeister`.
 
-The setup currently provisions the cluster only. MySQL, the application, and
-monitoring will be installed by a separate `terraform/platform` stage, after
-the cluster exists. Separating the stages gives the Helm provider a working
-Kubernetes connection before it initializes.
+The setup scripts create the cluster, prepare the application image, and install
+MySQL and the application through `terraform/platform`. Separating the two
+Terraform stages gives the Helm provider a working Kubernetes connection before
+it initializes. Monitoring will be added in a later stage.
 
 Install the following tools and make them available on `PATH`:
 
@@ -215,7 +215,8 @@ Install the following tools and make them available on `PATH`:
 | Terraform | 1.15.8 | Required by the configuration |
 | Kind CLI | 0.33.0 | Matches the Kind library in provider 0.13.0 |
 | kubectl | 1.36.4 | The scripts accept 1.35.x through 1.37.x |
-| Helm | 4.3.1 | Needed for the forthcoming platform stage |
+| Helm | 4.3.1 | Used for application chart validation |
+| Git | 2.x | Required for checkout and image versioning |
 
 Tools can also be installed locally under the ignored `.local/bin` directory.
 Both scripts prefer that directory when it exists, so a project-specific
@@ -256,8 +257,9 @@ bash scripts/setup.sh
 
 Both scripts resolve paths from their own location, check prerequisites,
 initialize and validate Terraform, apply the cluster configuration, and wait
-for the node to become Ready. The scripts use `-auto-approve` for unattended
-local provisioning. They refuse to reuse a same-named cluster absent from this
+for the node to become Ready. They then prepare the image, validate the chart,
+and apply the platform stage. The scripts use `-auto-approve` for unattended
+local provisioning of both stages. They refuse to reuse a same-named cluster absent from this
 checkout's Terraform state. PowerShell checks external command exit codes and
 restores the caller's environment and working directory on completion or failure.
 
@@ -313,6 +315,12 @@ The provider versions and checksums are committed in the platform lockfile.
 Generated passwords and Secret data remain in local Terraform state, so keep
 state files and plan logs private and preserve state while the database is in use.
 
+The manual commands above use the static `crewmeister-app:local` Terraform defaults.
+The setup scripts instead write their selected image settings to the ignored
+`.local/image.auto.tfvars.json` file. After scripted setup, use
+`-var-file=../../.local/image.auto.tfvars.json` for subsequent platform plan/apply
+commands to preserve that image selection.
+
 Once the platform is deployed, destroy it **before** the cluster:
 
 ```text
@@ -366,3 +374,43 @@ kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister --
 Use the assigned port printed by kubectl for `/user?id=1`, POST `/user`, and the
 Actuator endpoints. Both application and MySQL data remain available after pod
 replacement. Database storage persists across pod replacements, not full teardown.
+
+### Image selection during setup
+
+By default, setup tries the public GHCR image tagged with the checkout's full
+commit SHA. If it cannot pull that image, it builds the checkout locally and
+loads it into Kind. Uncommitted application build inputs also select the local
+build path in automatic mode. Local tags are derived from the build input
+contents, so repeated setup uses the same tag when those inputs are unchanged.
+
+Both registry and local images are loaded into the project Kind cluster.
+Registry images use `IfNotPresent`; local images use `Never` to avoid a registry
+pull for an image that exists only on the development machine. The image helpers
+are `scripts/load-image.ps1` and `scripts/load-image.sh`.
+
+Optional environment variables are shared by both script families:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CREWMEISTER_IMAGE_MODE` | `auto` | `auto` tries the registry then builds locally; `local` always builds; `registry` requires a successful pull |
+| `CREWMEISTER_IMAGE_REPOSITORY` | `ghcr.io/ouemnaa/crewmeister-devops-challenge` | Repository to pull from in automatic or registry mode |
+| `CREWMEISTER_IMAGE_TAG` | Current Git commit SHA | Registry tag to pull; local fallback always tags the current build inputs |
+
+Force local mode in PowerShell:
+
+```powershell
+$env:CREWMEISTER_IMAGE_MODE = 'local'
+.\scripts\setup.ps1
+Remove-Item Env:CREWMEISTER_IMAGE_MODE
+```
+
+Or in Bash:
+
+```bash
+CREWMEISTER_IMAGE_MODE=local bash scripts/setup.sh
+```
+
+Registry mode stops if the selected image is unavailable. Automatic mode logs
+pull failures under `.local/image-pull.*` and continues with a local build.
+Publishing the GHCR image will be added with the CI pipeline; until then,
+automatic mode supports a fresh checkout through its local fallback.

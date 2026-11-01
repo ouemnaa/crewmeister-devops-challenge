@@ -13,7 +13,7 @@ fail() {
     exit 1
 }
 
-for tool in docker terraform kind kubectl; do
+for tool in docker terraform kind kubectl helm git; do
     command -v "$tool" >/dev/null 2>&1 || fail "Required tool is missing: $tool. See the README prerequisites."
 done
 
@@ -55,5 +55,13 @@ context="$(terraform -chdir=terraform/cluster output -raw context)"
 kubectl --kubeconfig "$kubeconfig" --context "$context" wait --for=condition=Ready nodes --all --timeout=180s
 kubectl --kubeconfig "$kubeconfig" --context "$context" get nodes
 
-echo "Cluster ready. Project kubeconfig: $kubeconfig"
-echo 'The current setup provisions the cluster only; application deployment follows in the platform stage.'
+bash "$repo_root/scripts/load-image.sh"
+helm lint helm/crewmeister-app --strict
+terraform -chdir=terraform/platform init -input=false
+terraform -chdir=terraform/platform validate
+terraform -chdir=terraform/platform apply -input=false -auto-approve \
+    -var-file=../../.local/image.auto.tfvars.json "-var=kubeconfig_path=$kubeconfig" "-var=kube_context=$context"
+kubectl --kubeconfig "$kubeconfig" --context "$context" --namespace crewmeister get pods,pvc,service
+
+echo 'Deployment ready. Access the API with:'
+printf 'kubectl --kubeconfig "%s" --context "%s" --namespace crewmeister port-forward --address 127.0.0.1 service/crewmeister-app :8080\n' "$kubeconfig" "$context"
