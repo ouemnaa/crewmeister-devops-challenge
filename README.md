@@ -71,6 +71,8 @@ Creates a new user
 Use Java 17 and a running MySQL database named `challenge`. The database account
 must be able to create tables and read and write data. Use a disposable database:
 Flyway applies the schema and inserts the initial user, Alice, with ID 1.
+The database username and password must be supplied through the environment;
+the application has no default database credentials.
 
 Set both database URLs. The application uses `SPRING_DATASOURCE_URL`, while
 Flyway uses `SPRING_DATASOURCE_WRITER_URL`.
@@ -113,3 +115,81 @@ The application exposes the following Actuator endpoints on its HTTP port:
 
 Probe endpoints are enabled in local environments as well as Kubernetes.
 The integration tests check both probes and confirm JVM and HTTP metrics are exposed.
+
+### Building and running the Docker image
+
+Use Docker with Linux containers. The multi-stage build uses the Maven wrapper
+and Java 17, so a host JDK or Maven installation is not required to build the image.
+Both Eclipse Temurin base images are pinned by digest. The runtime contains the
+application JAR and a JRE and runs as user `10001:10001`.
+
+```text
+docker build --tag crewmeister-app:local .
+```
+
+Integration tests require MySQL and run separately with `mvnw clean verify`;
+the image build packages the application with tests skipped.
+
+For a disposable container check, create a `.local` directory and two local files.
+These files are ignored by Git and excluded from the Docker build context.
+Replace the password placeholders with generated values, using the same application
+password in both files.
+
+`.local/mysql.env`:
+
+```dotenv
+MYSQL_ROOT_PASSWORD=<generated-root-password>
+MYSQL_DATABASE=challenge
+MYSQL_USER=crewmeister
+MYSQL_PASSWORD=<generated-application-password>
+```
+
+`.local/app.env`:
+
+```dotenv
+SPRING_DATASOURCE_URL=jdbc:mysql://crewmeister-db:3306/challenge
+SPRING_DATASOURCE_WRITER_URL=jdbc:mysql://crewmeister-db:3306/challenge
+SPRING_DATASOURCE_USERNAME=crewmeister
+SPRING_DATASOURCE_PASSWORD=<generated-application-password>
+```
+
+The following single-line Docker commands work in PowerShell and Bash:
+
+```text
+docker network create crewmeister-container
+docker run --detach --name crewmeister-db --network crewmeister-container --env-file .local/mysql.env mysql:8.4@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7
+docker logs crewmeister-db
+```
+
+Wait for MySQL's final `ready for connections` message on port 3306, then start
+the application. MySQL's hostname inside the network is `crewmeister-db`;
+`localhost` inside the application container refers to the application itself.
+
+```text
+docker run --detach --name crewmeister-app --network crewmeister-container --env-file .local/app.env --publish 127.0.0.1::8080 crewmeister-app:local
+docker logs crewmeister-app
+docker port crewmeister-app 8080/tcp
+```
+
+Docker assigns an available localhost port. Use the reported port to access
+`http://127.0.0.1:<port>/user?id=1` and the Actuator endpoints.
+POST `/user` with content type `application/json` and body `{"name":"Reviewer"}`
+to create a user. Both API endpoints return greeting strings; POST does not
+return the generated user ID.
+
+Check the runtime identity with `docker exec crewmeister-app id`.
+Database credentials are supplied at runtime and are not built into the image.
+Environment files and container environment variables contain credentials and
+should be treated as local secrets.
+
+Remove the disposable resources when finished:
+
+```text
+docker rm --force crewmeister-app
+docker rm --force --volumes crewmeister-db
+docker network rm crewmeister-container
+```
+
+Removing the database container with `--volumes` deletes its anonymous data volume.
+Delete the two local environment files after use. This container check precedes
+the Kubernetes deployment; the final setup will use Terraform and Helm.
