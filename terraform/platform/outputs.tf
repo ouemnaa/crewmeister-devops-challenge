@@ -7,3 +7,8 @@ output "mysql_service" {
   description = "Cluster-internal MySQL service name."
   value       = helm_release.mysql.name
 }
+
+output "application_service" {
+  description = "Cluster-internal service for application access and port forwarding."
+  value       = helm_release.application.name
+}

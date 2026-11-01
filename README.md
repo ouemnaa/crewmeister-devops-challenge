@@ -272,22 +272,13 @@ Inspect the cluster explicitly:
 kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister get nodes
 ```
 
-Until teardown scripts are introduced, remove the cluster with Terraform from
-the repository root and confirm its removal:
-
-```text
-terraform -chdir=terraform/cluster destroy
-kind get clusters
-docker ps -a --filter label=io.x-k8s.kind.cluster=crewmeister
-```
-
-Confirm Terraform's destruction prompt only for the project resource. Removing
-Kind also removes its Kubernetes data. Keep Terraform state, plan output, and
+Destroy the platform before removing the cluster, using the ordered teardown
+below. Removing Kind also removes its Kubernetes data. Keep Terraform state, plan output, and
 kubeconfigs private: the provider stores cluster credentials in state. State,
 provider downloads, and the project kubeconfig are excluded from Git; the
 provider lockfile is committed.
 
-### MySQL on Kubernetes
+### Helm deployments on Kubernetes
 
 `terraform/platform` installs the `crewmeister-mysql` Helm release in the
 `crewmeister` namespace. It uses the public
@@ -305,9 +296,13 @@ MySQL uses a StatefulSet, an internal ClusterIP service, resource limits, and a
 authenticate over TCP against the application database. The PVC survives pod
 replacement; it is not intended to survive deletion of the Kind cluster.
 
-After creating the cluster with the setup script, run:
+The platform also deploys the application chart described below. After creating
+the cluster with the setup script, build and load its local image before applying
+the platform:
 
 ```text
+docker build --tag crewmeister-app:local .
+kind load docker-image crewmeister-app:local --name crewmeister
 terraform -chdir=terraform/platform init
 terraform -chdir=terraform/platform apply
 kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister --namespace crewmeister get pods,pvc,service
@@ -323,7 +318,51 @@ Once the platform is deployed, destroy it **before** the cluster:
 ```text
 terraform -chdir=terraform/platform destroy
 terraform -chdir=terraform/cluster destroy
+kind get clusters
+docker ps -a --filter label=io.x-k8s.kind.cluster=crewmeister
 ```
 
 Platform destruction deletes the project namespace and its database PVC. This
 removes stored data. A new deployment after full teardown generates new passwords.
+
+### Application Helm chart
+
+`helm/crewmeister-app` defines the application Deployment, internal Service, and
+ConfigMap. Terraform installs it as a separate `crewmeister-app` release after
+MySQL is Ready. The chart references the existing application Secret and never
+receives the database root password.
+
+The ConfigMap sets both application and Flyway JDBC URLs and bounded Flyway
+connection retries. The container runs as UID `10001`, with a read-only root
+filesystem, a writable `/tmp`, dropped capabilities, no privilege escalation,
+and no mounted service-account token. CPU and memory requests and limits are
+defined in chart values.
+
+The startup probe allows time for Spring Boot and Flyway to initialize. Readiness
+checks MySQL connectivity; liveness checks the application independently so a
+temporary database outage does not cause unnecessary application restarts.
+ConfigMap changes and chart changes trigger a deployment rollout.
+
+The Terraform defaults use `crewmeister-app:local` with pull policy `Never`.
+For a published image, supply `image_repository`, `image_tag`, and
+`image_pull_policy=IfNotPresent` as Terraform inputs. Use a commit SHA tag rather
+than a moving `latest` tag. `values-local.yaml` supports images loaded into Kind;
+the same chart can render registry image settings without changing templates.
+
+Validate the chart:
+
+```text
+helm lint helm/crewmeister-app --strict
+helm lint helm/crewmeister-app --values helm/crewmeister-app/values-local.yaml --strict
+helm template crewmeister-app helm/crewmeister-app --namespace crewmeister --values helm/crewmeister-app/values-local.yaml
+```
+
+Access the API with a localhost port forward:
+
+```text
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister --namespace crewmeister port-forward --address 127.0.0.1 service/crewmeister-app :8080
+```
+
+Use the assigned port printed by kubectl for `/user?id=1`, POST `/user`, and the
+Actuator endpoints. Both application and MySQL data remain available after pod
+replacement. Database storage persists across pod replacements, not full teardown.

@@ -1,0 +1,57 @@
+replicaCount: 1
+fullnameOverride: ""
+
+image:
+  repository: crewmeister-app
+  tag: local
+  pullPolicy: IfNotPresent
+
+service:
+  port: 8080
+
+database:
+  host: crewmeister-mysql
+  port: 3306
+  name: challenge
+  existingSecret: crewmeister-database
+  usernameKey: username
+  passwordKey: password
+
+application:
+  name: crewmeister
+  flywayConnectRetries: 30
+  flywayConnectRetriesInterval: 2s
+
+podAnnotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+startupProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 60
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3

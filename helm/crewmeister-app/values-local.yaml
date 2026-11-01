@@ -1,0 +1,4 @@
+image:
+  repository: crewmeister-app
+  tag: local
+  pullPolicy: Never

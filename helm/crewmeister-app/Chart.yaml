@@ -1,0 +1,6 @@
+apiVersion: v2
+name: crewmeister-app
+description: Crewmeister Spring Boot user API
+type: application
+version: 0.1.0
+appVersion: "0.0.1-SNAPSHOT"

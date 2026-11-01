@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "crewmeister-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crewmeister-app.labels" . | nindent 4 }}
+data:
+  SPRING_APPLICATION_NAME: {{ .Values.application.name | quote }}
+  SPRING_DATASOURCE_URL: {{ printf "jdbc:mysql://%s:%v/%s" .Values.database.host .Values.database.port .Values.database.name | quote }}
+  SPRING_DATASOURCE_WRITER_URL: {{ printf "jdbc:mysql://%s:%v/%s" .Values.database.host .Values.database.port .Values.database.name | quote }}
+  SPRING_FLYWAY_CONNECTRETRIES: {{ .Values.application.flywayConnectRetries | quote }}
+  SPRING_FLYWAY_CONNECTRETRIESINTERVAL: {{ .Values.application.flywayConnectRetriesInterval | quote }}
+  ACTUATOR_ENDPOINTS: "health,info,prometheus"
