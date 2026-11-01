@@ -31,3 +31,31 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Terraform ###
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.example.tfvars
+!*.example.tfvars.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+# Commit .terraform.lock.hcl files to pin provider dependencies.
+
+### Local runtime configuration and credentials ###
+/.local/
+.env
+.env.*
+!.env.example
+*.kubeconfig
+kubeconfig
+kubeconfig.*
+.kube/
+.aws/
+*.key
+*.pem
