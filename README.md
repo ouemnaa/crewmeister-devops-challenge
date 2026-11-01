@@ -193,3 +193,96 @@ docker network rm crewmeister-container
 Removing the database container with `--volumes` deletes its anonymous data volume.
 Delete the two local environment files after use. This container check precedes
 the Kubernetes deployment; the final setup will use Terraform and Helm.
+
+### Local Kubernetes cluster
+
+`terraform/cluster` creates a single-node Kind cluster named `crewmeister`.
+The API server binds to `127.0.0.1` on an available port. No application ports
+are reserved on the host. The dedicated kubeconfig is written to
+`.local/crewmeister.kubeconfig`; project commands always specify its context,
+`kind-crewmeister`.
+
+The setup currently provisions the cluster only. MySQL, the application, and
+monitoring will be installed by a separate `terraform/platform` stage, after
+the cluster exists. Separating the stages gives the Helm provider a working
+Kubernetes connection before it initializes.
+
+Install the following tools and make them available on `PATH`:
+
+| Tool | Selected version | Notes |
+| --- | --- | --- |
+| Docker Engine / Docker Desktop | Tested with Engine 28.0.4 | Must be running with Linux containers |
+| Terraform | 1.15.8 | Required by the configuration |
+| Kind CLI | 0.33.0 | Matches the Kind library in provider 0.13.0 |
+| kubectl | 1.36.4 | The scripts accept 1.35.x through 1.37.x |
+| Helm | 4.3.1 | Needed for the forthcoming platform stage |
+
+Tools can also be installed locally under the ignored `.local/bin` directory.
+Both scripts prefer that directory when it exists, so a project-specific
+kubectl can be used without replacing Docker Desktop's bundled client.
+
+The Kind provider is pinned to `0.13.0`, and Kubernetes is pinned to the
+`kindest/node:v1.36.4` image digest from the
+[Kind 0.33.0 release](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0).
+The committed Terraform lockfile includes provider checksums for Windows amd64,
+Linux amd64/arm64, and macOS amd64/arm64. kubectl must follow the
+[Kubernetes version compatibility policy](https://kubernetes.io/releases/version-skew-policy/#kubectl).
+
+Prefer Docker hosts using cgroup v2. On older Docker/WSL installations using
+cgroup v1, setup detects that mode and sets `cgroup_v1_compatibility=true`,
+which adds the documented `failCgroupV1: false` kubelet setting. It does not
+change Docker or host settings. This is a temporary local compatibility path;
+see [Kubernetes cgroup migration guidance](https://kubernetes.io/blog/2026/10/06/kubernetes-cgroups-v2-shift/).
+When running Terraform apply or plan directly on such a host, pass
+`-var=cgroup_v1_compatibility=true` to match the setup script.
+
+Installation instructions:
+[Terraform](https://developer.hashicorp.com/terraform/install),
+[Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation),
+[kubectl on Windows](https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/),
+[kubectl on Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/),
+[kubectl on macOS](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/),
+and [Helm](https://helm.sh/docs/intro/install/).
+
+From a checkout, run the script for your shell:
+
+```powershell
+.\scripts\setup.ps1
+```
+
+```bash
+bash scripts/setup.sh
+```
+
+Both scripts resolve paths from their own location, check prerequisites,
+initialize and validate Terraform, apply the cluster configuration, and wait
+for the node to become Ready. The scripts use `-auto-approve` for unattended
+local provisioning. They refuse to reuse a same-named cluster absent from this
+checkout's Terraform state. PowerShell checks external command exit codes and
+restores the caller's environment and working directory on completion or failure.
+
+On Windows, if a downloaded script is blocked, inspect it and run
+`Unblock-File .\scripts\setup.ps1`. If your execution policy also blocks scripts,
+use `Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned` for the
+current PowerShell session, subject to your organization's policy.
+
+Inspect the cluster explicitly:
+
+```text
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister get nodes
+```
+
+Until teardown scripts are introduced, remove the cluster with Terraform from
+the repository root and confirm its removal:
+
+```text
+terraform -chdir=terraform/cluster destroy
+kind get clusters
+docker ps -a --filter label=io.x-k8s.kind.cluster=crewmeister
+```
+
+Confirm Terraform's destruction prompt only for the project resource. Removing
+Kind also removes its Kubernetes data. Keep Terraform state, plan output, and
+kubeconfigs private: the provider stores cluster credentials in state. State,
+provider downloads, and the project kubeconfig are excluded from Git; the
+provider lockfile is committed.
