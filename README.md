@@ -99,3 +99,17 @@ Replace the password and connection settings with those of your test database.
 The tests start the application on a random HTTP port, check the migrated user,
 create and retrieve a user through the API, and check application health.
 Test-created users have unique names and are removed after the POST test.
+
+### Health and metrics
+
+The application exposes the following Actuator endpoints on its HTTP port:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/actuator/health` | Overall application health, including MySQL connectivity |
+| `/actuator/health/liveness` | Application liveness, independent of database availability |
+| `/actuator/health/readiness` | Readiness to receive traffic, including MySQL connectivity |
+| `/actuator/prometheus` | Prometheus metrics, including JVM memory and HTTP request counts and timings |
+
+Probe endpoints are enabled in local environments as well as Kubernetes.
+The integration tests check both probes and confirm JVM and HTTP metrics are exposed.

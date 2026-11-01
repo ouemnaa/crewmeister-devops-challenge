@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -16,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureObservability
 class CrewmeisterChallengeApplicationTests {
 
   @Autowired
@@ -59,6 +61,28 @@ class CrewmeisterChallengeApplicationTests {
   @Test
   void reportsHealthyApplicationAndDatabase() {
     assertHealthUp("/actuator/health");
+  }
+
+  @Test
+  void exposesLivenessProbe() {
+    assertHealthUp("/actuator/health/liveness");
+  }
+
+  @Test
+  void exposesReadinessProbe() {
+    assertHealthUp("/actuator/health/readiness");
+  }
+
+  @Test
+  void exposesJvmAndHttpMetricsForPrometheus() {
+    rest.getForEntity("/user?id=1", String.class);
+
+    ResponseEntity<String> response = rest.getForEntity("/actuator/prometheus", String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .contains("jvm_memory_used_bytes")
+        .contains("http_server_requests_seconds_count");
   }
 
   private void assertHealthUp(String path) {
