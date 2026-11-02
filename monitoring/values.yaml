@@ -1,0 +1,106 @@
+fullnameOverride: crewmeister-monitoring
+
+defaultRules:
+  create: false
+alertmanager:
+  enabled: false
+nodeExporter:
+  enabled: false
+kubeApiServer:
+  enabled: false
+kubelet:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheusOperator:
+  tls:
+    enabled: false
+  admissionWebhooks:
+    enabled: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 6h
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector:
+      matchLabels:
+        release: crewmeister-monitoring
+    serviceMonitorNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: crewmeister
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 768Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+grafana:
+  fullnameOverride: crewmeister-grafana
+  defaultDashboardsEnabled: false
+  initChownData:
+    enabled: false
+  testFramework:
+    enabled: false
+  sidecar:
+    dashboards:
+      enabled: false
+    datasources:
+      enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: http://crewmeister-monitoring-prometheus:9090
+          isDefault: true
+          editable: false
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: crewmeister
+          orgId: 1
+          folder: Crewmeister
+          type: file
+          disableDeletion: true
+          allowUiUpdates: false
+          options:
+            path: /var/lib/grafana/dashboards/crewmeister

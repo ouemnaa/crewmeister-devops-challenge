@@ -54,6 +54,10 @@ checks=true
 while IFS= read -r resource; do
     [[ -n "$resource" ]] || continue
     case "$resource" in
+        helm_release.mysql_exporter) check='helm_release.mysql_exporter.name == "crewmeister-mysql-exporter" && helm_release.mysql_exporter.namespace == "crewmeister"' ;;
+        helm_release.monitoring) check='helm_release.monitoring.name == "crewmeister-monitoring" && helm_release.monitoring.namespace == "crewmeister"' ;;
+        kubernetes_secret_v1.grafana) check='kubernetes_secret_v1.grafana.metadata[0].name == "crewmeister-grafana-admin" && kubernetes_secret_v1.grafana.metadata[0].namespace == "crewmeister"' ;;
+        random_password.grafana) check=true ;;
         helm_release.application) check='helm_release.application.name == "crewmeister-app" && helm_release.application.namespace == "crewmeister"' ;;
         helm_release.mysql) check='helm_release.mysql.name == "crewmeister-mysql" && helm_release.mysql.namespace == "crewmeister"' ;;
         kubernetes_namespace_v1.crewmeister) check='kubernetes_namespace_v1.crewmeister.metadata[0].name == "crewmeister"' ;;

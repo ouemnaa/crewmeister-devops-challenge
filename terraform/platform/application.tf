@@ -29,8 +29,12 @@ resource "helm_release" "application" {
       podAnnotations = {
         "checksum/chart" = local.application_chart_checksum
       }
+      serviceMonitor = {
+        enabled = true
+        release = helm_release.monitoring.name
+      }
     })
   ]
 
-  depends_on = [helm_release.mysql]
+  depends_on = [helm_release.mysql, helm_release.monitoring]
 }

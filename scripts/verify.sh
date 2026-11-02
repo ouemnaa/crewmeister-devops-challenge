@@ -15,6 +15,7 @@ kube=(kubectl --kubeconfig "$repo_root/.local/crewmeister.kubeconfig" --context 
 name="verify-$(date +%s)-$$-$RANDOM"
 log_prefix="$repo_root/.local/$name"
 forward_pid=''
+monitor_pids=()
 post_attempted=false
 
 query_mysql() {
@@ -35,6 +36,10 @@ cleanup() {
         kill "$forward_pid" 2>/dev/null || true
         wait "$forward_pid" 2>/dev/null || true
     fi
+    for pid in "${monitor_pids[@]}"; do
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    done
     exit "$result"
 }
 trap cleanup EXIT
@@ -47,6 +52,10 @@ clusters="$(kind get clusters)"
 "${kube[@]}" wait --for=condition=Ready nodes --all --timeout=180s
 "${kube[@]}" rollout status statefulset/crewmeister-mysql --timeout=300s
 "${kube[@]}" rollout status deployment/crewmeister-app --timeout=300s
+"${kube[@]}" wait --for=create statefulset/prometheus-crewmeister-monitoring-prometheus --timeout=180s
+for workload in statefulset/prometheus-crewmeister-monitoring-prometheus deployment/crewmeister-grafana deployment/crewmeister-mysql-exporter; do
+    "${kube[@]}" rollout status "$workload" --timeout=300s
+done
 [[ "$("${kube[@]}" get pvc db-volume-crewmeister-mysql-0 --output='jsonpath={.status.phase}')" == Bound ]] || fail 'MySQL PVC is not Bound.'
 [[ "$("${kube[@]}" get service crewmeister-app crewmeister-mysql --output='jsonpath={.items[*].spec.type}')" == 'ClusterIP ClusterIP' ]] || fail 'Project services must be internal ClusterIP services.'
 [[ "$(query_mysql 'SELECT 1;')" == 1 ]] || fail 'MySQL is not responding.'
@@ -76,4 +85,35 @@ for path in /actuator/health /actuator/health/readiness /actuator/health/livenes
 done
 metrics="$("${http[@]}" "$base_url/actuator/prometheus")"
 [[ "$metrics" == *jvm_memory_used_bytes* && "$metrics" == *http_server_requests_seconds_count* ]] || fail 'Expected JVM and HTTP metrics are missing.'
-echo 'Verification passed: cluster, workloads, storage, services, GET/POST persistence, health, and metrics.'
+for service in crewmeister-monitoring-prometheus:9090 crewmeister-grafana:80; do
+    prefix="$log_prefix-${service%:*}"
+    "${kube[@]}" port-forward --address 127.0.0.1 "service/${service%:*}" ":${service##*:}" >"$prefix.log" 2>"$prefix.err" &
+    monitor_pids+=("$!")
+    port=''
+    for attempt in {1..30}; do
+        kill -0 "${monitor_pids[${#monitor_pids[@]}-1]}" 2>/dev/null || fail "Monitoring port forwarding failed. See $prefix.err."
+        port="$(sed -n 's/^Forwarding from 127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' "$prefix.log")"
+        [[ -z "$port" ]] || break
+        sleep 1
+    done
+    [[ -n "$port" ]] || fail 'Monitoring port forwarding did not become ready.'
+    url="http://127.0.0.1:$port"
+    if [[ "$service" == crewmeister-monitoring-prometheus:* ]]; then
+        up=false
+        for attempt in {1..100}; do
+            result="$("${http[@]}" --get --data-urlencode 'query=up{namespace="crewmeister",service="crewmeister-app"}' "$url/api/v1/query")"
+            if [[ "$result" =~ \"value\":\[[^]]*,\"1\"\] ]]; then up=true; break; fi
+            sleep 3
+        done
+        [[ "$up" == true ]] || fail 'Prometheus application target is not UP.'
+    else
+        health="$("${http[@]}" "$url/api/health")"
+        [[ "$health" =~ \"database\"[[:space:]]*:[[:space:]]*\"ok\" ]] || fail 'Grafana is unhealthy.'
+        password="$("${kube[@]}" get secret crewmeister-grafana-admin --output=go-template --template='{{index .data "admin-password" | base64decode}}')"
+        dashboard="$("${http[@]}" --user "admin:$password" "$url/api/dashboards/uid/crewmeister")"
+        [[ "$dashboard" == *'"provisioned":true'* && "$dashboard" == *'"uid":"crewmeister"'* ]] || fail 'Grafana dashboard is not provisioned.'
+        unset password dashboard
+    fi
+done
+
+echo 'Verification passed: cluster, workloads, storage, GET/POST persistence, health, Prometheus target, and Grafana dashboard.'

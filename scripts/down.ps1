@@ -15,6 +15,8 @@ Push-Location $repoRoot
 
 function Invoke-Checked {
     param([string]$Program, [string[]]$CommandArgs)
+    # Native stderr may contain progress; use the process exit code for failure.
+    $ErrorActionPreference = 'Continue'
     & $Program @CommandArgs
     if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit code $LASTEXITCODE." }
 }
@@ -59,6 +61,10 @@ try {
     Assert-State cluster 'kind_cluster.crewmeister.name == "crewmeister" && kind_cluster.crewmeister.context_name == "kind-crewmeister" && kind_cluster.crewmeister.kubeconfig_path == abspath("${path.module}/../../.local/crewmeister.kubeconfig")'
 
     $guards = @{
+        'helm_release.mysql_exporter' = 'helm_release.mysql_exporter.name == "crewmeister-mysql-exporter" && helm_release.mysql_exporter.namespace == "crewmeister"'
+        'helm_release.monitoring' = 'helm_release.monitoring.name == "crewmeister-monitoring" && helm_release.monitoring.namespace == "crewmeister"'
+        'kubernetes_secret_v1.grafana' = 'kubernetes_secret_v1.grafana.metadata[0].name == "crewmeister-grafana-admin" && kubernetes_secret_v1.grafana.metadata[0].namespace == "crewmeister"'
+        'random_password.grafana' = 'true'
         'helm_release.application' = 'helm_release.application.name == "crewmeister-app" && helm_release.application.namespace == "crewmeister"'
         'helm_release.mysql' = 'helm_release.mysql.name == "crewmeister-mysql" && helm_release.mysql.namespace == "crewmeister"'
         'kubernetes_namespace_v1.crewmeister' = 'kubernetes_namespace_v1.crewmeister.metadata[0].name == "crewmeister"'

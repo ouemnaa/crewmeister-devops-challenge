@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 39,
+  "time": {
+    "to": "now",
+    "from": "now-15m"
+  },
+  "version": 1,
+  "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "id": 1,
+      "gridPos": {
+        "y": 0,
+        "w": 12,
+        "h": 8,
+        "x": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "title": "Application target",
+      "targets": [
+        {
+          "legendFormat": "{{pod}}{{area}}",
+          "expr": "up{namespace=\"crewmeister\",service=\"crewmeister-app\"}",
+          "refId": "A"
+        }
+      ],
+      "type": "stat",
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "displayMode": "list"
+        }
+      }
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "id": 2,
+      "gridPos": {
+        "y": 0,
+        "w": 12,
+        "h": 8,
+        "x": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "title": "User requests / second",
+      "targets": [
+        {
+          "legendFormat": "{{pod}}{{area}}",
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"crewmeister\",service=\"crewmeister-app\",uri=\"/user\"}[5m]))",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries",
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "displayMode": "list"
+        }
+      }
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "id": 3,
+      "gridPos": {
+        "y": 8,
+        "w": 12,
+        "h": 8,
+        "x": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "title": "Mean request latency",
+      "targets": [
+        {
+          "legendFormat": "{{pod}}{{area}}",
+          "expr": "sum(rate(http_server_requests_seconds_sum{namespace=\"crewmeister\",service=\"crewmeister-app\",uri=\"/user\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=\"crewmeister\",service=\"crewmeister-app\",uri=\"/user\"}[5m])), 0.000001)",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries",
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "displayMode": "list"
+        }
+      }
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "id": 4,
+      "gridPos": {
+        "y": 8,
+        "w": 12,
+        "h": 8,
+        "x": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "title": "HTTP 5xx / second",
+      "targets": [
+        {
+          "legendFormat": "{{pod}}{{area}}",
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"crewmeister\",service=\"crewmeister-app\",status=~\"5..\"}[5m]))",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries",
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "displayMode": "list"
+        }
+      }
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "id": 5,
+      "gridPos": {
+        "y": 16,
+        "w": 12,
+        "h": 8,
+        "x": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "title": "JVM memory used",
+      "targets": [
+        {
+          "legendFormat": "{{pod}}{{area}}",
+          "expr": "sum by (area) (jvm_memory_used_bytes{namespace=\"crewmeister\",service=\"crewmeister-app\"})",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries",
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "displayMode": "list"
+        }
+      }
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "id": 6,
+      "gridPos": {
+        "y": 16,
+        "w": 12,
+        "h": 8,
+        "x": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "title": "Container restarts",
+      "targets": [
+        {
+          "legendFormat": "{{pod}}{{area}}",
+          "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"crewmeister\",container!=\"\"})",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries",
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "displayMode": "list"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "MySQL available",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "mysql_up{namespace=\"crewmeister\",service=\"crewmeister-mysql-exporter\"}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "MySQL connections",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "mysql_global_status_threads_connected{namespace=\"crewmeister\",service=\"crewmeister-mysql-exporter\"}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "tags": [
+    "crewmeister"
+  ],
+  "editable": false,
+  "timezone": "browser",
+  "refresh": "15s",
+  "title": "Crewmeister application",
+  "uid": "crewmeister"
+}

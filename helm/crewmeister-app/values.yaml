@@ -24,6 +24,11 @@ application:
 
 podAnnotations: {}
 
+serviceMonitor:
+  enabled: false
+  release: crewmeister-monitoring
+  interval: 15s
+
 resources:
   requests:
     cpu: 100m
