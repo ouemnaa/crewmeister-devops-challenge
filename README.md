@@ -1,542 +1,211 @@
-# Crewmeister Challenge
+# Crewmeister DevOps assessment
 
-## Background
+Run the Java 17 / Spring Boot API and MySQL on local Kubernetes using Docker, Kind, Terraform and Helm. Prometheus and Grafana are included. No cloud account is required.
 
-At Crewmeister, our development team is continuously growing. We aim to hire the best educated, motivated, and enthusiastic people in the field who have fun building up Crewmeister in our vision to empower small businesses to thrive in a digital world. For this quest, we are continuously getting new applicants from all over the world. To filter which candidates could be a good fit, we provide our candidates with a coding challenge that we manually review and evaluate.
+The [original assessment](docs/assessment.md) is preserved separately. See [validation evidence](docs/validation.md) for checks performed and limitations.
 
----
+## Quick start
 
-## DevOps Engineer Task
+Install the prerequisites below and start Docker with Linux containers.
 
-As a DevOps Engineer at Crewmeister, you will be in charge of several challenging tasks in your daily work. One of your core responsibilities will be to ensure that the system is always running smoothly and that the application is deployed successfully to our customers.
-
-In this challenge, you should use DevOps best practices to architect and implement the complete cycle of building, packaging, and deploying a Java application (specified later in this document). 
-
-The following are core technologies/tools that should be present in the solution:
-
-- Dockerfile
-- Helm Chart
-- Terraform to interact with the Kubernetes cluster
-
-You have the flexibility to utilize any cloud provider of your choice to deploy and run the application effectively. Additionally, it should be designed to operate seamlessly on local machines, allowing for a versatile setup that caters to various operational preferences and environments.
-
-## Plus:
-
-- Create a CI Pipeline in Github to automate the application lifecycle
-
-- Add monitoring tools to check the health of the application
-
-## Important Points:
-
-- At Crewmeister, we value creativity and pushing for better. You are encouraged to expand the solution as you find fit. To do so, you must ensure high-quality documentation and that the base solution is correctly executed.
-- All the tools used must be publicly accessible or explicitly documented on how to authenticate.
-- All the tools must be free to use.
-
- ## Submission:
-- Provide the link to your GitHub repository in the Greenhouse submission form.
-- Submit your completed project via the Greenhouse link in the email received from the Recruitment Manager.
-
-## Challenge Application
-
-A Spring Boot application that provides a simple user management REST API.
-
-### Technologies Used
-
-- Java 17
-- Spring Boot 3.3.5
-- MySQL Database
-- Flyway Migration
-- Maven
-- Spring Data JPA
-- Spring Actuator
-
-### Pre-requisites
-
-- JDK 17
-- MySQL
-- Maven
-
-### API Endpoints
-
-#### GET /user
-
-Retrieves a user by ID
-
-#### POST /user
-
-Creates a new user
-
-### Running integration tests
-
-Use Java 17 and a running MySQL database named `challenge`. The database account
-must be able to create tables and read and write data. Use a disposable database:
-Flyway applies the schema and inserts the initial user, Alice, with ID 1.
-The database username and password must be supplied through the environment;
-the application has no default database credentials.
-
-Set both database URLs. The application uses `SPRING_DATASOURCE_URL`, while
-Flyway uses `SPRING_DATASOURCE_WRITER_URL`.
-
-PowerShell:
+**Windows PowerShell 5.1 or later:**
 
 ```powershell
-$env:SPRING_DATASOURCE_URL = 'jdbc:mysql://127.0.0.1:3306/challenge'
-$env:SPRING_DATASOURCE_WRITER_URL = $env:SPRING_DATASOURCE_URL
-$env:SPRING_DATASOURCE_USERNAME = 'crewmeister'
-$env:SPRING_DATASOURCE_PASSWORD = '<local-database-password>'
-.\mvnw.cmd clean verify
-```
-
-Linux / macOS / WSL:
-
-```bash
-export SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:3306/challenge'
-export SPRING_DATASOURCE_WRITER_URL="$SPRING_DATASOURCE_URL"
-export SPRING_DATASOURCE_USERNAME='crewmeister'
-export SPRING_DATASOURCE_PASSWORD='<local-database-password>'
-bash ./mvnw clean verify
-```
-
-Replace the password and connection settings with those of your test database.
-The tests start the application on a random HTTP port, check the migrated user,
-create and retrieve a user through the API, and check application health.
-Test-created users have unique names and are removed after the POST test.
-
-### Health and metrics
-
-The application exposes the following Actuator endpoints on its HTTP port:
-
-| Endpoint | Purpose |
-| --- | --- |
-| `/actuator/health` | Overall application health, including MySQL connectivity |
-| `/actuator/health/liveness` | Application liveness, independent of database availability |
-| `/actuator/health/readiness` | Readiness to receive traffic, including MySQL connectivity |
-| `/actuator/prometheus` | Prometheus metrics, including JVM memory and HTTP request counts and timings |
-
-Probe endpoints are enabled in local environments as well as Kubernetes.
-The integration tests check both probes and confirm JVM and HTTP metrics are exposed.
-
-### Building and running the Docker image
-
-Use Docker with Linux containers. The multi-stage build uses the Maven wrapper
-and Java 17, so a host JDK or Maven installation is not required to build the image.
-Both Eclipse Temurin base images are pinned by digest. The runtime contains the
-application JAR and a JRE and runs as user `10001:10001`.
-
-```text
-docker build --tag crewmeister-app:local .
-```
-
-Integration tests require MySQL and run separately with `mvnw clean verify`;
-the image build packages the application with tests skipped.
-
-For a disposable container check, create a `.local` directory and two local files.
-These files are ignored by Git and excluded from the Docker build context.
-Replace the password placeholders with generated values, using the same application
-password in both files.
-
-`.local/mysql.env`:
-
-```dotenv
-MYSQL_ROOT_PASSWORD=<generated-root-password>
-MYSQL_DATABASE=challenge
-MYSQL_USER=crewmeister
-MYSQL_PASSWORD=<generated-application-password>
-```
-
-`.local/app.env`:
-
-```dotenv
-SPRING_DATASOURCE_URL=jdbc:mysql://crewmeister-db:3306/challenge
-SPRING_DATASOURCE_WRITER_URL=jdbc:mysql://crewmeister-db:3306/challenge
-SPRING_DATASOURCE_USERNAME=crewmeister
-SPRING_DATASOURCE_PASSWORD=<generated-application-password>
-```
-
-The following single-line Docker commands work in PowerShell and Bash:
-
-```text
-docker network create crewmeister-container
-docker run --detach --name crewmeister-db --network crewmeister-container --env-file .local/mysql.env mysql:8.4@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7
-docker logs crewmeister-db
-```
-
-Wait for MySQL's final `ready for connections` message on port 3306, then start
-the application. MySQL's hostname inside the network is `crewmeister-db`;
-`localhost` inside the application container refers to the application itself.
-
-```text
-docker run --detach --name crewmeister-app --network crewmeister-container --env-file .local/app.env --publish 127.0.0.1::8080 crewmeister-app:local
-docker logs crewmeister-app
-docker port crewmeister-app 8080/tcp
-```
-
-Docker assigns an available localhost port. Use the reported port to access
-`http://127.0.0.1:<port>/user?id=1` and the Actuator endpoints.
-POST `/user` with content type `application/json` and body `{"name":"Reviewer"}`
-to create a user. Both API endpoints return greeting strings; POST does not
-return the generated user ID.
-
-Check the runtime identity with `docker exec crewmeister-app id`.
-Database credentials are supplied at runtime and are not built into the image.
-Environment files and container environment variables contain credentials and
-should be treated as local secrets.
-
-Remove the disposable resources when finished:
-
-```text
-docker rm --force crewmeister-app
-docker rm --force --volumes crewmeister-db
-docker network rm crewmeister-container
-```
-
-Removing the database container with `--volumes` deletes its anonymous data volume.
-Delete the two local environment files after use. The Kubernetes setup below
-uses Terraform and Helm and generates its own database credentials.
-
-### Local Kubernetes cluster
-
-`terraform/cluster` creates a single-node Kind cluster named `crewmeister`.
-The API server binds to `127.0.0.1` on an available port. No application ports
-are reserved on the host. The dedicated kubeconfig is written to
-`.local/crewmeister.kubeconfig`; project commands always specify its context,
-`kind-crewmeister`.
-
-The setup scripts create the cluster, prepare the application image, and install
-MySQL and the application through `terraform/platform`. Separating the two
-Terraform stages gives the Helm provider a working Kubernetes connection before
-it initializes. Monitoring will be added in a later stage.
-
-Install the following tools and make them available on `PATH`:
-
-| Tool | Selected version | Notes |
-| --- | --- | --- |
-| Docker Engine / Docker Desktop | Tested with Engine 28.0.4 | Must be running with Linux containers |
-| Terraform | 1.15.8 | Required by the configuration |
-| Kind CLI | 0.33.0 | Matches the Kind library in provider 0.13.0 |
-| kubectl | 1.36.4 | The scripts accept 1.35.x through 1.37.x |
-| Helm | 4.3.1 | Used for application chart validation |
-| Git | 2.x | Required for checkout and image versioning |
-
-Tools can also be installed locally under the ignored `.local/bin` directory.
-Both scripts prefer that directory when it exists, so a project-specific
-kubectl can be used without replacing Docker Desktop's bundled client.
-
-The Kind provider is pinned to `0.13.0`, and Kubernetes is pinned to the
-`kindest/node:v1.36.4` image digest from the
-[Kind 0.33.0 release](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0).
-The committed Terraform lockfile includes provider checksums for Windows amd64,
-Linux amd64/arm64, and macOS amd64/arm64. kubectl must follow the
-[Kubernetes version compatibility policy](https://kubernetes.io/releases/version-skew-policy/#kubectl).
-
-Prefer Docker hosts using cgroup v2. On older Docker/WSL installations using
-cgroup v1, setup detects that mode and sets `cgroup_v1_compatibility=true`,
-which adds the documented `failCgroupV1: false` kubelet setting. It does not
-change Docker or host settings. This is a temporary local compatibility path;
-see [Kubernetes cgroup migration guidance](https://kubernetes.io/blog/2026/10/06/kubernetes-cgroups-v2-shift/).
-When running Terraform apply or plan directly on such a host, pass
-`-var=cgroup_v1_compatibility=true` to match the setup script.
-
-Installation instructions:
-[Terraform](https://developer.hashicorp.com/terraform/install),
-[Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation),
-[kubectl on Windows](https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/),
-[kubectl on Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/),
-[kubectl on macOS](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/),
-and [Helm](https://helm.sh/docs/intro/install/).
-
-From a checkout, run the script for your shell:
-
-```powershell
+git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
+cd crewmeister-devops-challenge
 .\scripts\setup.ps1
-```
-
-```bash
-bash scripts/setup.sh
-```
-
-Both scripts resolve paths from their own location, check prerequisites,
-initialize and validate Terraform, apply the cluster configuration, and wait
-for the node to become Ready. They then prepare the image, validate the chart,
-and apply the platform stage. The scripts use `-auto-approve` for unattended
-local provisioning of both stages. They refuse to reuse a same-named cluster absent from this
-checkout's Terraform state. PowerShell checks external command exit codes and
-restores the caller's environment and working directory on completion or failure.
-
-On Windows, if a downloaded script is blocked, inspect it and run
-`Unblock-File .\scripts\setup.ps1`. If your execution policy also blocks scripts,
-use `Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned` for the
-current PowerShell session, subject to your organization's policy.
-
-Inspect the cluster explicitly:
-
-```text
-kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister get nodes
-```
-
-Destroy the platform before removing the cluster, using the ordered teardown
-below. Removing Kind also removes its Kubernetes data. Keep Terraform state, plan output, and
-kubeconfigs private: the provider stores cluster credentials in state. State,
-provider downloads, and the project kubeconfig are excluded from Git; the
-provider lockfile is committed.
-
-### Helm deployments on Kubernetes
-
-`terraform/platform` installs the `crewmeister-mysql` Helm release in the
-`crewmeister` namespace. It uses the public
-[groundhog2k MySQL chart](https://github.com/groundhog2k/helm-charts/tree/master/charts/mysql),
-pinned to chart version `3.1.5`, with the same digest-pinned official MySQL 8.4
-image used for the container check. No chart repository login is required.
-
-Terraform generates separate root and application passwords and creates two
-Kubernetes Secrets. Helm receives only Secret names and key mappings. The
-application account is restricted to the `challenge` database; its Secret does
-not contain the root password. Passwords are not Terraform outputs.
-
-MySQL uses a StatefulSet, an internal ClusterIP service, resource limits, and a
-2 GiB PVC backed by Kind's `standard` storage class. Startup and readiness checks
-authenticate over TCP against the application database. The PVC survives pod
-replacement; it is not intended to survive deletion of the Kind cluster.
-
-The platform also deploys the application chart described below. After creating
-the cluster with the setup script, build and load its local image before applying
-the platform:
-
-```text
-docker build --tag crewmeister-app:local .
-kind load docker-image crewmeister-app:local --name crewmeister
-terraform -chdir=terraform/platform init
-terraform -chdir=terraform/platform apply
-kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister --namespace crewmeister get pods,pvc,service
-```
-
-The platform providers explicitly use the project kubeconfig and context.
-The provider versions and checksums are committed in the platform lockfile.
-Generated passwords and Secret data remain in local Terraform state, so keep
-state files and plan logs private and preserve state while the database is in use.
-
-The manual commands above use the static `crewmeister-app:local` Terraform defaults.
-The setup scripts instead write their selected image settings to the ignored
-`.local/image.auto.tfvars.json` file. After scripted setup, use
-`-var-file=../../.local/image.auto.tfvars.json` for subsequent platform plan/apply
-commands to preserve that image selection.
-
-Use the teardown script for your shell to destroy the platform **before** the cluster:
-
-```powershell
+.\scripts\verify.ps1
+# When finished; deletes the project database:
 .\scripts\down.ps1
 ```
 
+If execution policy blocks scripts, use a separate process, for example `powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1`. No machine-wide policy change is needed.
+
+**Linux, macOS or WSL with Bash:**
+
 ```bash
+git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
+cd crewmeister-devops-challenge
+bash scripts/setup.sh
+bash scripts/verify.sh
+# When finished; deletes the project database:
 bash scripts/down.sh
 ```
 
-Platform destruction deletes the project namespace and its database PVC. This
-removes stored data. A new deployment after full teardown generates new passwords.
+Setup creates the `crewmeister` cluster and four Terraform-managed Helm releases. Initial downloads can take 10-20 minutes or longer on a slow connection. Setup and teardown use Terraform `-auto-approve` for this dedicated environment. Teardown checks ownership, cluster identity, API address and certificate before applying saved destroy plans.
 
-### Application Helm chart
+## Prerequisites
 
-`helm/crewmeister-app` defines the application Deployment, internal Service, and
-ConfigMap. Terraform installs it as a separate `crewmeister-app` release after
-MySQL is Ready. The chart references the existing application Secret and never
-receives the database root password.
+Put these tools on `PATH`:
 
-The ConfigMap sets both application and Flyway JDBC URLs and bounded Flyway
-connection retries. The container runs as UID `10001`, with a read-only root
-filesystem, a writable `/tmp`, dropped capabilities, no privilege escalation,
-and no mounted service-account token. CPU and memory requests and limits are
-defined in chart values.
-
-The startup probe allows time for Spring Boot and Flyway to initialize. Readiness
-checks MySQL connectivity; liveness checks the application independently so a
-temporary database outage does not cause unnecessary application restarts.
-ConfigMap changes and chart changes trigger a deployment rollout.
-
-The Terraform defaults use `crewmeister-app:local` with pull policy `Never`.
-For a published image, supply `image_repository`, `image_tag`, and
-`image_pull_policy=IfNotPresent` as Terraform inputs. Use a commit SHA tag rather
-than a moving `latest` tag. `values-local.yaml` supports images loaded into Kind;
-the same chart can render registry image settings without changing templates.
-
-Validate the chart:
-
-```text
-helm lint helm/crewmeister-app --strict
-helm lint helm/crewmeister-app --values helm/crewmeister-app/values-local.yaml --strict
-helm template crewmeister-app helm/crewmeister-app --namespace crewmeister --values helm/crewmeister-app/values-local.yaml
-```
-
-Access the API with a localhost port forward:
-
-```text
-kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister --namespace crewmeister port-forward --address 127.0.0.1 service/crewmeister-app :8080
-```
-
-Use the assigned port printed by kubectl for `/user?id=1`, POST `/user`, and the
-Actuator endpoints. Both application and MySQL data remain available after pod
-replacement. Database storage persists across pod replacements, not full teardown.
-
-### Image selection during setup
-
-By default, setup tries the public GHCR image tagged with the checkout's full
-commit SHA. If it cannot pull that image, it builds the checkout locally and
-loads it into Kind. Uncommitted application build inputs also select the local
-build path in automatic mode. Local tags are derived from the build input
-contents, so repeated setup uses the same tag when those inputs are unchanged.
-
-Both registry and local images are loaded into the project Kind cluster.
-Registry images use `IfNotPresent`; local images use `Never` to avoid a registry
-pull for an image that exists only on the development machine. The image helpers
-are `scripts/load-image.ps1` and `scripts/load-image.sh`.
-
-Optional environment variables are shared by both script families:
-
-| Variable | Default | Purpose |
+| Tool | Version used | Installation |
 | --- | --- | --- |
-| `CREWMEISTER_IMAGE_MODE` | `auto` | `auto` tries the registry then builds locally; `local` always builds; `registry` requires a successful pull |
-| `CREWMEISTER_IMAGE_REPOSITORY` | `ghcr.io/ouemnaa/crewmeister-devops-challenge` | Repository to pull from in automatic or registry mode |
-| `CREWMEISTER_IMAGE_TAG` | Current Git commit SHA | Registry tag to pull; local fallback always tags the current build inputs |
+| Docker Engine / Desktop | Engine 28.0.4 | [Docker](https://docs.docker.com/engine/install/); Linux containers required |
+| Terraform | **1.15.8** | [HashiCorp releases](https://releases.hashicorp.com/terraform/1.15.8/) |
+| Kind | **0.33.0** | [Kind releases](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0) |
+| kubectl | **1.36.4** | [kubectl](https://kubernetes.io/docs/tasks/tools/); 1.35-1.37 clients also accepted |
+| Helm | **4.3.1** | [Helm release](https://github.com/helm/helm/releases/tag/v4.3.1) |
+| Git | Git 2.x | [Git](https://git-scm.com/downloads) |
+| Bash and curl | Bash 3.2+, curl 7+ | Required for Bash scripts; WSL needs Docker Desktop integration |
 
-Force local mode in PowerShell:
+Choose binaries matching your OS/CPU and verify publisher checksums. Provider locks cover Windows amd64, Linux amd64/arm64 and macOS amd64/arm64. Java 17 is needed only for direct tests: Docker includes the JDK and uses the checked-in Maven wrapper.
+
+Allocate at least 4 CPUs and 6 GiB RAM to Docker; 8 GiB is more comfortable during builds. GitHub, Maven Central, chart repositories and container registries must be reachable. The Kubernetes API uses a random localhost port. Prefer cgroup v2; on older cgroup-v1 Docker hosts, setup enables Kubernetes' temporary `failCgroupV1: false` compatibility setting without changing the host.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    setup[Setup script] --> cluster[Terraform: cluster]
+    cluster --> kind[Kind: Kubernetes 1.36.4]
+    setup --> image[Pull or build image; load into Kind]
+    image --> platform[Terraform: platform]
+    platform --> mysql[Helm: MySQL + 2 GiB PVC]
+    platform --> app[Helm: Spring Boot API]
+    platform --> monitoring[Helm: Prometheus + Grafana]
+    platform --> exporter[Helm: MySQL exporter]
+    app --> mysql
+    monitoring -->|ServiceMonitor| app
+    monitoring -->|ServiceMonitor| exporter
+    exporter --> mysql
+    reviewer[Localhost port forwarding] --> app
+    reviewer --> monitoring
+```
+
+Two Terraform stages avoid configuring Helm before Kubernetes exists. Terraform owns the releases; scripts coordinate stages and image delivery. The custom application chart lives in `helm/crewmeister-app`. Public upstream charts are Groundhog2k MySQL 3.1.5, `kube-prometheus-stack` 92.17.0 and `prometheus-mysql-exporter` 2.16.0. MySQL uses the official 8.4 image pinned by digest.
+
+All services are internal ClusterIP services in namespace `crewmeister`. The application runs as user 10001 with dropped capabilities, no service-account token, a read-only root filesystem and writable `/tmp`. Probes use Actuator; readiness includes the database. Terraform generates separate application/root database secrets. The application and exporter receive only the application account.
+
+MySQL's PVC preserves data across pod replacement. Destroying the namespace or cluster deletes the data. Prometheus retains six hours of disposable metrics. Grafana's datasource and dashboard are provisioned from version-controlled files. Alertmanager, node exporter, control-plane scrapes and default dashboards are disabled to reduce resource use.
+
+## Image delivery
+
+Setup tries `ghcr.io/ouemnaa/crewmeister-devops-challenge:<full-commit-SHA>` for the checkout. If unavailable, or build inputs have changes, it builds locally and loads the image into Kind. Local tags derive from source contents and use pull policy `Never`.
 
 ```powershell
+# Force local build:
 $env:CREWMEISTER_IMAGE_MODE = 'local'
 .\scripts\setup.ps1
+# Return to default mode:
 Remove-Item Env:CREWMEISTER_IMAGE_MODE
 ```
-
-Or in Bash:
 
 ```bash
 CREWMEISTER_IMAGE_MODE=local bash scripts/setup.sh
 ```
 
-Registry mode stops if the selected image is unavailable. Automatic mode logs
-pull failures under `.local/image-pull.*` and continues with a local build.
-CI publishes commit-tagged images after successful checks on pushes to `main`.
-Automatic mode also supports a fresh checkout through its local fallback when
-that checkout's image has not yet been published or is inaccessible.
+Set mode `registry` to require a published image without fallback. `CREWMEISTER_IMAGE_TAG` overrides the tag and `CREWMEISTER_IMAGE_REPOSITORY` overrides the public repository. These are environment variables in both shells. Public images need no login. On a fork, update both image scripts' default repository or set the override.
 
-### Verifying a deployment
+## API access
 
-After setup, run one command for your shell:
+Keep this running in a terminal:
+
+```text
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-app :8080
+```
+
+Replace `PORT` with the localhost port printed by kubectl.
 
 ```powershell
-.\scripts\verify.ps1
+Invoke-RestMethod 'http://127.0.0.1:PORT/user?id=1'
+Invoke-RestMethod 'http://127.0.0.1:PORT/user' -Method Post -ContentType 'application/json' -Body '{"name":"Reviewer"}'
 ```
 
 ```bash
-bash scripts/verify.sh
+curl --fail 'http://127.0.0.1:PORT/user?id=1'
+curl --fail -H 'Content-Type: application/json' --data '{"name":"Reviewer"}' 'http://127.0.0.1:PORT/user'
 ```
 
-Verification checks the project Kind cluster, Ready nodes, healthy MySQL and
-application workloads, a Bound PVC, internal services, and an authenticated
-database query. It then uses a temporary localhost port forward to test the
-seeded user, POST a uniquely named user, confirm that record in MySQL, and
-retrieve it by its actual database ID. Health probes and JVM/HTTP metrics are
-also checked.
+GET returns `Greetings from Crewmeister, Alice!`. POST persists the name and returns its greeting, preserving the original contract. Verification queries the generated ID through MySQL, retrieves that user and removes its unique test record. Existing records are preserved.
 
-The scripts delete their test user and stop the port forward on completion or
-failure. They use the dedicated project kubeconfig and context and work from
-any current directory. Bash verification also requires `curl`. A failed check
-returns a nonzero exit code; logs for port forwarding stay under ignored `.local/`.
+Health paths are `/actuator/health`, `/actuator/health/readiness` and `/actuator/health/liveness`; metrics are at `/actuator/prometheus`. They are unauthenticated for this local exercise; services stay internal and forwarding binds to localhost.
 
-### Teardown behavior
+## Monitoring access
 
-Teardown is unattended: it applies saved Terraform destroy plans without an
-interactive confirmation. Run it only when you intend to delete the project's
-database and infrastructure.
-
-Before planning deletion, the scripts check the expected Terraform resource
-addresses and names, dedicated kubeconfig path, Kind node container, live API
-port, and Terraform's recorded certificate authority. They refuse a mismatched
-target, unexpected resources, or infrastructure with missing ownership state.
-They use the explicit project context throughout.
-
-Both stages are planned before deletion begins. The platform is destroyed first;
-if that fails, the cluster remains available for troubleshooting. After successful
-cluster destruction, the scripts confirm that the project Kind node containers
-are gone. A repeated teardown succeeds without action when both stages and the
-cluster are already absent.
-
-The scripts leave cached images, the shared Kind Docker network, and unrelated
-containers, volumes, and Kubernetes contexts alone. Provider caches and local
-Terraform files are retained for the next setup. State backups may still contain
-old credentials and remain private. Temporary destroy-plan files are removed on
-exit; they are also covered by the repository's ignore rules.
-
-All lifecycle scripts work from any current directory. PowerShell restores the
-caller's path, kubeconfig environment variable, and Kind provider selection even
-when a check fails. Bash scripts run in their own shell process.
-
-### Continuous integration
-
-`.github/workflows/ci.yml` runs on pull requests targeting `main`, pushes to
-`main`, and manual dispatch. Jobs use Ubuntu 24.04 runners with bounded timeouts.
-
-- **Build and test:** installs Java 17, caches Maven dependencies, starts the
-  pinned MySQL 8.4 service, and runs `mvnw clean verify`. Both JDBC URLs target
-  the service's dynamically assigned localhost port. Test reports are retained
-  as workflow artifacts, including when tests fail.
-- **Validate infrastructure:** installs Terraform 1.15.8 and checksum-verified
-  Helm 4.3.1, lints and renders the default and local chart values, checks
-  Terraform formatting, and initializes and validates both Terraform stages.
-  Backend initialization and infrastructure apply are disabled; no cluster,
-  kubeconfig, deployment credentials, or Terraform state are needed. Bash
-  lifecycle scripts also receive syntax checks.
-- **Build and scan image:** builds the application image, runs digest-pinned
-  Trivy 0.76.1 against OS and Java dependencies, and retains full JSON and text
-  vulnerability reports for 14 days. Severity totals appear in the job summary.
-  Vulnerability databases are cached to avoid repeating the large initial download.
-- **Publish image:** runs only for a successful push to `main`, with
-  `packages: write` scoped to this job. It downloads and publishes the image
-  already built and scanned in the read-only job, without rebuilding it or
-  checking out source. The GHCR tag is the full Git commit SHA; no `latest` tag
-  is published. Pull requests and manual dispatch cannot publish.
-
-CI database credentials are disposable values derived from the workflow run and
-attempt; they are not deployment credentials. The workflow requires no personal
-access token for these checks. Its default token permission is `contents: read`,
-checkout does not persist Git credentials, and actions are pinned to full commit
-SHAs. Dependabot checks GitHub Actions and Docker base-image updates weekly.
-
-Trivy findings are initially **report-only**: all severities, including unfixed
-findings, remain visible in artifacts. Scanner execution errors still fail CI.
-The first scan identified vulnerabilities in the inherited application dependency
-baseline, including embedded Tomcat. Dependency remediation and enforcement of a
-vulnerability threshold remain follow-up work; a green CI result does not certify
-that the image has no known vulnerabilities.
-
-The scanned image archive is retained for one day to transfer it between jobs.
-Artifact integrity is checked before publishing. Test reports are retained for
-seven days. None of the jobs uploads Terraform state, kubeconfigs, or deployment
-credentials.
-
-#### First GHCR publication
-
-Publishing uses GitHub's built-in `GITHUB_TOKEN`; no personal access token is
-required. The image name is `ghcr.io/<repository-owner>/<repository-name>` in
-lowercase. Its source label links the package to the repository.
-
-A new GHCR package defaults to private, even when the source repository is
-public. After the first push, open the package's **Package settings**, change
-its visibility to **Public**, and rerun the failed publish job. See
-[GitHub's package visibility instructions](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
-The workflow checks the published manifest using an empty Docker credential
-directory and fails publication verification until anonymous access works.
-If the image archive has expired, rerun the complete workflow to produce it again.
-
-For a local anonymous check, use an empty Docker configuration directory rather
-than credentials from an existing login:
+Run either command in its own terminal and open the localhost port it prints:
 
 ```text
-docker --config .local/anonymous-docker manifest inspect ghcr.io/<owner>/<repository>:<commit-sha>
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-grafana :80
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-monitoring-prometheus :9090
 ```
 
-Deploy a published version by setting `CREWMEISTER_IMAGE_MODE=registry` and
-`CREWMEISTER_IMAGE_TAG` to that commit SHA before running setup. Forks can set
-`CREWMEISTER_IMAGE_REPOSITORY` to their own GHCR path.
+Grafana username is `admin`. Retrieve its generated password locally:
 
-These checks validate the repository; they do not deploy to the Kind cluster on
-a reviewer's machine. A hosted green run can only be confirmed after the workflow
-has been pushed to GitHub.
+```powershell
+$secret = kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get secret crewmeister-grafana-admin -o json | ConvertFrom-Json
+[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($secret.data.'admin-password'))
+```
+
+```bash
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get secret crewmeister-grafana-admin -o go-template --template='{{index .data "admin-password" | base64decode}}'
+printf '\n'
+```
+
+Open **Dashboards > Crewmeister > Crewmeister application**, or `/d/crewmeister`. Eight panels show target availability, request rate, mean latency, HTTP 5xx rate, JVM memory, pod restarts, MySQL availability and connections. Generate API traffic or run verification. Rate panels need two scrapes; discovery after an update can take several minutes.
+
+Prometheus queries `up{namespace="crewmeister",service="crewmeister-app"}` and `mysql_up{namespace="crewmeister",service="crewmeister-mysql-exporter"}` should return 1. The exporter collects global status/variables without replication or administrative privileges.
+
+## Scripts and local state
+
+| Script pair | Purpose |
+| --- | --- |
+| `setup.ps1` / `setup.sh` | Preflight, cluster, image delivery and Terraform-managed releases |
+| `load-image.ps1` / `load-image.sh` | Image selection and local build; requires the cluster |
+| `verify.ps1` / `verify.sh` | Nodes, storage, API persistence, health, metrics, Prometheus target and Grafana dashboard |
+| `down.ps1` / `down.sh` | Ownership checks, destroy platform then cluster; repeat safely when absent |
+
+Scripts resolve paths from their own location and use `.local/crewmeister.kubeconfig` with context `kind-crewmeister`. Your default kubeconfig is not used for deployment. Keep the checkout and state until teardown finishes. Do not run lifecycle commands concurrently. Use the same OS environment for a deployment's lifecycle: Terraform records native paths.
+
+Terraform state contains generated passwords in plaintext. State, backups, plans, kubeconfigs, logs, caches and build output are ignored by Git; provider locks are committed. Keep local files private. Teardown refuses live infrastructure without matching state; do not delete state to resolve failures. Unrelated Docker resources and clusters are outside its scope.
+
+## CI and security
+
+[GitHub Actions](.github/workflows/ci.yml) runs for pull requests/pushes to `main` and manual dispatch:
+
+1. Java 17 build and six integration tests against disposable MySQL 8.4.
+2. Helm lint/render, monitoring render, dashboard JSON, both Terraform stages and Bash syntax checks.
+3. Full-history Gitleaks scan; detected secrets fail CI and reports are redacted.
+4. One Docker build, Trivy OS/Java scanning, JSON/text reports and CycloneDX SBOM.
+5. Trusted pushes to `main` publish the scanned image tagged with the commit SHA. Pull requests cannot publish. Only the separate publisher has package-write permission; it verifies anonymous GHCR access.
+
+Actions and scanners are pinned to immutable revisions. Dependabot checks Actions, Docker and Maven weekly; Java and Spring Boot major upgrades require a compatibility decision.
+
+Trivy findings are **report-only**; scanner failures fail CI. The 2026-11-02 local scan after dependency updates found 2 CRITICAL, 0 HIGH, 28 MEDIUM and 4 LOW findings. Critical findings `CVE-2026-47884` and `CVE-2026-47890` affect Spring MVC 6.2.19; Trivy lists Spring 7.0.9 as the fix, requiring assessment of a Spring Boot major upgrade. No ignore list hides findings. Inspect current CI artifacts because vulnerability data changes. This local assessment is not a production security baseline.
+
+Optional SonarCloud analysis runs on trusted pushes to `main` when repository variables `SONAR_PROJECT_KEY`, `SONAR_ORGANIZATION` and secret `SONAR_TOKEN` are configured. Missing tokens skip analysis. Fork pull requests never receive the token; local setup needs no Sonar account.
+
+The existing [hosted run](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/runs/41517004402) passed application tests, infrastructure validation, scanning and public GHCR publishing. New local commits must be pushed before their hosted checks run. A fork's new GHCR package may need **Package settings > Change visibility > Public**; anonymous verification fails clearly otherwise.
+
+## Direct integration tests
+
+Install Java 17 and use a disposable MySQL database named `challenge`. Its account must apply the schema and read/write tables. Flyway uses the writer URL. Never use a production database.
+
+```powershell
+$env:JAVA_HOME = '<Java 17 installation>'
+$env:SPRING_DATASOURCE_URL = 'jdbc:mysql://127.0.0.1:3306/challenge'
+$env:SPRING_DATASOURCE_WRITER_URL = $env:SPRING_DATASOURCE_URL
+$env:SPRING_DATASOURCE_USERNAME = '<database-user>'
+$env:SPRING_DATASOURCE_PASSWORD = '<database-password>'
+.\mvnw.cmd --batch-mode clean verify
+```
+
+```bash
+export JAVA_HOME='<Java 17 installation>'
+export SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:3306/challenge'
+export SPRING_DATASOURCE_WRITER_URL="$SPRING_DATASOURCE_URL"
+export SPRING_DATASOURCE_USERNAME='<database-user>'
+export SPRING_DATASOURCE_PASSWORD='<database-password>'
+bash ./mvnw --batch-mode clean verify
+```
+
+## Troubleshooting and tradeoffs
+
+- **Missing tool:** install the pinned version, add it to `PATH` and reopen the terminal. WSL needs Linux binaries and Docker integration.
+- **Kind cannot start:** check Linux containers, available RAM and `docker info`. Setup reports cgroup-v1 compatibility explicitly.
+- **Registry unavailable:** set `CREWMEISTER_IMAGE_MODE=local`; check access to Maven Central and base images.
+- **Release timeout:** inspect `kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get pods,events` and pod logs. Preserve state, resolve the cause and rerun setup.
+- **Port conflict:** the `:PORT` forwarding form allocates a free host port. Keep kubectl running.
+- **Changed credentials:** an existing MySQL volume retains its password. Keep generated credentials/state together; rotate the database account with its secret.
+- **Teardown ownership refusal:** restore the original checkout/state and kubeconfig. Do not bypass checks or delete unrelated resources.
+
+Kind provides a reproducible single-node environment. Production availability, backups, ingress TLS, external secret management, network isolation and remote continuous deployment are future work. MySQL/application releases remain independent, and monitoring CRDs precede ServiceMonitors. Moving to cloud Kubernetes would require its own cluster module, storage, secured state, identity and deployment workflow. This repository provisions no cloud resources.
