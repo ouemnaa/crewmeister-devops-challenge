@@ -45,6 +45,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Java 17
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -68,6 +69,52 @@ jobs:
         with:
           name: test-results
           path: target/surefire-reports/
+          overwrite: true
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Analyze with SonarCloud when configured
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SONAR_PROJECT_KEY != '' && vars.SONAR_ORGANIZATION != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+        run: |
+          if [[ -z "$SONAR_TOKEN" ]]; then
+            echo '::notice::SonarCloud is configured without SONAR_TOKEN; skipping analysis.'
+            exit 0
+          fi
+          bash ./mvnw --batch-mode --no-transfer-progress \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar \
+            -Dsonar.host.url=https://sonarcloud.io \
+            "-Dsonar.projectKey=$SONAR_PROJECT_KEY" "-Dsonar.organization=$SONAR_ORGANIZATION"
+
+  secrets:
+    name: Scan Git history for secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        run: |
+          mkdir -p reports
+          docker run --rm --mount "type=bind,source=$PWD,target=/repo,readonly" \
+            --mount "type=bind,source=$PWD/reports,target=/reports" \
+            --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env GIT_CONFIG_VALUE_0=/repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb \
+            git /repo --log-opts=--all --redact=100 --report-format=json --report-path=/reports/gitleaks.json
+
+      - name: Upload redacted secret scan
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: secret-scan
+          path: reports/gitleaks.json
           overwrite: true
           if-no-files-found: warn
           retention-days: 7
@@ -107,6 +154,22 @@ jobs:
           helm template crewmeister-app helm/crewmeister-app --namespace crewmeister > "$RUNNER_TEMP/chart-default.yaml"
           helm template crewmeister-app helm/crewmeister-app --namespace crewmeister \
             --values helm/crewmeister-app/values-local.yaml > "$RUNNER_TEMP/chart-local.yaml"
+          helm lint helm/crewmeister-app --set serviceMonitor.enabled=true --strict
+          helm template crewmeister-app helm/crewmeister-app --namespace crewmeister \
+            --set serviceMonitor.enabled=true > "$RUNNER_TEMP/chart-monitored.yaml"
+
+      - name: Validate monitoring configuration
+        run: |
+          python3 -m json.tool monitoring/dashboards/crewmeister.json >/dev/null
+          helm template crewmeister-monitoring kube-prometheus-stack \
+            --repo https://prometheus-community.github.io/helm-charts --version 92.17.0 \
+            --namespace crewmeister --values monitoring/values.yaml \
+            --set grafana.admin.existingSecret=crewmeister-grafana-admin > "$RUNNER_TEMP/monitoring.yaml"
+          helm template crewmeister-mysql-exporter prometheus-mysql-exporter \
+            --repo https://prometheus-community.github.io/helm-charts --version 2.16.0 \
+            --namespace crewmeister --values monitoring/mysql-exporter.yaml \
+            --set mysql.existingPasswordSecret.name=crewmeister-database \
+            --set mysql.existingPasswordSecret.key=password > "$RUNNER_TEMP/mysql-exporter.yaml"
 
       - name: Validate every Terraform stage
         run: |
@@ -124,7 +187,7 @@ jobs:
 
   image:
     name: Build and scan image
-    needs: [test, infrastructure]
+    needs: [test, infrastructure, secrets]
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
@@ -162,6 +225,8 @@ jobs:
             --format json --output /reports/trivy.json --exit-code 0 "crewmeister-ci:$GITHUB_SHA"
           docker run --rm --mount "type=bind,source=$PWD/reports,target=/reports" \
             "$TRIVY_IMAGE" convert --scanners vuln --format table --output /reports/trivy.txt /reports/trivy.json
+          docker run --rm --mount "type=bind,source=$PWD/reports,target=/reports" \
+            "$TRIVY_IMAGE" convert --format cyclonedx --output /reports/sbom.cdx.json /reports/trivy.json
 
       - name: Summarize vulnerability findings
         run: |
@@ -211,7 +276,7 @@ jobs:
 
   publish:
     name: Publish image
-    needs: [test, infrastructure, image]
+    needs: [test, infrastructure, secrets, image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
