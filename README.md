@@ -414,3 +414,27 @@ Registry mode stops if the selected image is unavailable. Automatic mode logs
 pull failures under `.local/image-pull.*` and continues with a local build.
 Publishing the GHCR image will be added with the CI pipeline; until then,
 automatic mode supports a fresh checkout through its local fallback.
+
+### Verifying a deployment
+
+After setup, run one command for your shell:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+```bash
+bash scripts/verify.sh
+```
+
+Verification checks the project Kind cluster, Ready nodes, healthy MySQL and
+application workloads, a Bound PVC, internal services, and an authenticated
+database query. It then uses a temporary localhost port forward to test the
+seeded user, POST a uniquely named user, confirm that record in MySQL, and
+retrieve it by its actual database ID. Health probes and JVM/HTTP metrics are
+also checked.
+
+The scripts delete their test user and stop the port forward on completion or
+failure. They use the dedicated project kubeconfig and context and work from
+any current directory. Bash verification also requires `curl`. A failed check
+returns a nonzero exit code; logs for port forwarding stay under ignored `.local/`.
