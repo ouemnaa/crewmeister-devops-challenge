@@ -68,6 +68,7 @@ jobs:
         with:
           name: test-results
           path: target/surefire-reports/
+          overwrite: true
           if-no-files-found: warn
           retention-days: 7
 
@@ -120,3 +121,131 @@ jobs:
           for script in scripts/*.sh; do
             bash -n "$script"
           done
+
+  image:
+    name: Build and scan image
+    needs: [test, infrastructure]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the application image
+        run: |
+          docker build --tag "crewmeister-ci:$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" .
+
+      - name: Restore vulnerability databases
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/trivy-cache/trivy/db
+            ${{ runner.temp }}/trivy-cache/trivy/java-db
+          key: trivy-0.76.1-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-0.76.1-${{ runner.os }}-
+
+      - name: Scan OS and Java dependencies
+        run: |
+          mkdir -p reports "$RUNNER_TEMP/trivy-cache"
+          docker run --rm \
+            --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+            --mount "type=bind,source=$PWD/reports,target=/reports" \
+            --mount "type=bind,source=$RUNNER_TEMP/trivy-cache,target=/root/.cache" \
+            "$TRIVY_IMAGE" image --scanners vuln --timeout 20m --no-progress \
+            --format json --output /reports/trivy.json --exit-code 0 "crewmeister-ci:$GITHUB_SHA"
+          docker run --rm --mount "type=bind,source=$PWD/reports,target=/reports" \
+            "$TRIVY_IMAGE" convert --scanners vuln --format table --output /reports/trivy.txt /reports/trivy.json
+
+      - name: Summarize vulnerability findings
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from collections import Counter
+
+          with open("reports/trivy.json", encoding="utf-8") as report:
+              results = json.load(report).get("Results") or []
+          counts = Counter(v.get("Severity", "UNKNOWN") for result in results
+                           for v in (result.get("Vulnerabilities") or []))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("### Trivy vulnerability report\n\n")
+              summary.write("Findings are report-only; scanner errors fail CI. Full JSON and text reports are attached.\n\n")
+              summary.write("| Severity | Findings |\n| --- | ---: |\n")
+              for severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"):
+                  summary.write(f"| {severity} | {counts[severity]} |\n")
+          PY
+
+      - name: Upload vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vulnerability-reports
+          path: reports/
+          overwrite: true
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Export the scanned image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p "$RUNNER_TEMP/publish"
+          docker save --output "$RUNNER_TEMP/publish/image.tar" "crewmeister-ci:$GITHUB_SHA"
+
+      - name: Transfer the scanned image to the publish job
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scanned-image
+          path: ${{ runner.temp }}/publish/image.tar
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    name: Publish image
+    needs: [test, infrastructure, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download the scanned image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: scanned-image
+          path: ${{ runner.temp }}/publish
+          digest-mismatch: error
+
+      - name: Publish the existing image to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          docker load --input "$RUNNER_TEMP/publish/image.tar"
+          docker tag "crewmeister-ci:$GITHUB_SHA" "$image"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$image"
+          echo "Published $image" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Confirm anonymous reviewer access
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          mkdir -p "$RUNNER_TEMP/anonymous-docker"
+          if ! docker --config "$RUNNER_TEMP/anonymous-docker" manifest inspect "$image" >/dev/null; then
+            echo '::error::Set the GHCR package visibility to public in Package settings, then rerun this job.'
+            exit 1
+          fi
+
+      - name: Remove registry credentials
+        if: always()
+        run: docker logout ghcr.io

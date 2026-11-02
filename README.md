@@ -413,8 +413,9 @@ CREWMEISTER_IMAGE_MODE=local bash scripts/setup.sh
 
 Registry mode stops if the selected image is unavailable. Automatic mode logs
 pull failures under `.local/image-pull.*` and continues with a local build.
-Publishing the GHCR image will be added with the CI pipeline; until then,
-automatic mode supports a fresh checkout through its local fallback.
+CI publishes commit-tagged images after successful checks on pushes to `main`.
+Automatic mode also supports a fresh checkout through its local fallback when
+that checkout's image has not yet been published or is inaccessible.
 
 ### Verifying a deployment
 
@@ -483,12 +484,58 @@ when a check fails. Bash scripts run in their own shell process.
   Backend initialization and infrastructure apply are disabled; no cluster,
   kubeconfig, deployment credentials, or Terraform state are needed. Bash
   lifecycle scripts also receive syntax checks.
+- **Build and scan image:** builds the application image, runs digest-pinned
+  Trivy 0.76.1 against OS and Java dependencies, and retains full JSON and text
+  vulnerability reports for 14 days. Severity totals appear in the job summary.
+  Vulnerability databases are cached to avoid repeating the large initial download.
+- **Publish image:** runs only for a successful push to `main`, with
+  `packages: write` scoped to this job. It downloads and publishes the image
+  already built and scanned in the read-only job, without rebuilding it or
+  checking out source. The GHCR tag is the full Git commit SHA; no `latest` tag
+  is published. Pull requests and manual dispatch cannot publish.
 
 CI database credentials are disposable values derived from the workflow run and
 attempt; they are not deployment credentials. The workflow requires no personal
 access token for these checks. Its default token permission is `contents: read`,
 checkout does not persist Git credentials, and actions are pinned to full commit
 SHAs. Dependabot checks GitHub Actions and Docker base-image updates weekly.
+
+Trivy findings are initially **report-only**: all severities, including unfixed
+findings, remain visible in artifacts. Scanner execution errors still fail CI.
+The first scan identified vulnerabilities in the inherited application dependency
+baseline, including embedded Tomcat. Dependency remediation and enforcement of a
+vulnerability threshold remain follow-up work; a green CI result does not certify
+that the image has no known vulnerabilities.
+
+The scanned image archive is retained for one day to transfer it between jobs.
+Artifact integrity is checked before publishing. Test reports are retained for
+seven days. None of the jobs uploads Terraform state, kubeconfigs, or deployment
+credentials.
+
+#### First GHCR publication
+
+Publishing uses GitHub's built-in `GITHUB_TOKEN`; no personal access token is
+required. The image name is `ghcr.io/<repository-owner>/<repository-name>` in
+lowercase. Its source label links the package to the repository.
+
+A new GHCR package defaults to private, even when the source repository is
+public. After the first push, open the package's **Package settings**, change
+its visibility to **Public**, and rerun the failed publish job. See
+[GitHub's package visibility instructions](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
+The workflow checks the published manifest using an empty Docker credential
+directory and fails publication verification until anonymous access works.
+If the image archive has expired, rerun the complete workflow to produce it again.
+
+For a local anonymous check, use an empty Docker configuration directory rather
+than credentials from an existing login:
+
+```text
+docker --config .local/anonymous-docker manifest inspect ghcr.io/<owner>/<repository>:<commit-sha>
+```
+
+Deploy a published version by setting `CREWMEISTER_IMAGE_MODE=registry` and
+`CREWMEISTER_IMAGE_TAG` to that commit SHA before running setup. Forks can set
+`CREWMEISTER_IMAGE_REPOSITORY` to their own GHCR path.
 
 These checks validate the repository; they do not deploy to the Kind cluster on
 a reviewer's machine. A hosted green run can only be confirmed after the workflow
