@@ -467,3 +467,29 @@ exit; they are also covered by the repository's ignore rules.
 All lifecycle scripts work from any current directory. PowerShell restores the
 caller's path, kubeconfig environment variable, and Kind provider selection even
 when a check fails. Bash scripts run in their own shell process.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on pull requests targeting `main`, pushes to
+`main`, and manual dispatch. Jobs use Ubuntu 24.04 runners with bounded timeouts.
+
+- **Build and test:** installs Java 17, caches Maven dependencies, starts the
+  pinned MySQL 8.4 service, and runs `mvnw clean verify`. Both JDBC URLs target
+  the service's dynamically assigned localhost port. Test reports are retained
+  as workflow artifacts, including when tests fail.
+- **Validate infrastructure:** installs Terraform 1.15.8 and checksum-verified
+  Helm 4.3.1, lints and renders the default and local chart values, checks
+  Terraform formatting, and initializes and validates both Terraform stages.
+  Backend initialization and infrastructure apply are disabled; no cluster,
+  kubeconfig, deployment credentials, or Terraform state are needed. Bash
+  lifecycle scripts also receive syntax checks.
+
+CI database credentials are disposable values derived from the workflow run and
+attempt; they are not deployment credentials. The workflow requires no personal
+access token for these checks. Its default token permission is `contents: read`,
+checkout does not persist Git credentials, and actions are pinned to full commit
+SHAs. Dependabot checks GitHub Actions and Docker base-image updates weekly.
+
+These checks validate the repository; they do not deploy to the Kind cluster on
+a reviewer's machine. A hosted green run can only be confirmed after the workflow
+has been pushed to GitHub.
