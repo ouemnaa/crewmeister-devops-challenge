@@ -90,21 +90,21 @@ try {
         }
         if (-not $url) { throw 'Monitoring port forwarding did not become ready.' }
         if ($parts[0] -eq 'crewmeister-monitoring-prometheus') {
-            $query = [uri]::EscapeDataString('up{namespace="crewmeister",service="crewmeister-app"}')
+            $query = [uri]::EscapeDataString('(up{namespace="crewmeister",service="crewmeister-app"} == 1) and on() (mysql_up{namespace="crewmeister",service="crewmeister-mysql-exporter"} == 1)')
             $up = $false
             for ($attempt = 0; $attempt -lt 100; $attempt++) {
                 $result = Invoke-RestMethod "$url/api/v1/query?query=$query" -TimeoutSec 10
                 if ($result.status -eq 'success' -and @($result.data.result | Where-Object { $_.value[1] -eq '1' }).Count -gt 0) { $up = $true; break }
                 Start-Sleep -Seconds 3
             }
-            if (-not $up) { throw 'Prometheus application target is not UP.' }
+            if (-not $up) { throw 'Prometheus application target or MySQL exporter is not UP.' }
         } else {
             if ((Invoke-RestMethod "$url/api/health" -TimeoutSec 10).database -ne 'ok') { throw 'Grafana is unhealthy.' }
             $secret = Invoke-Checked kubectl ($kubeArgs + @('get', 'secret', 'crewmeister-grafana-admin', '--output=json')) | ConvertFrom-Json
             $password = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($secret.data.'admin-password'))
             $authorization = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("admin:$password"))
             $dashboard = Invoke-RestMethod "$url/api/dashboards/uid/crewmeister" -Headers @{ Authorization = "Basic $authorization" } -TimeoutSec 10
-            if (-not $dashboard.meta.provisioned -or $dashboard.dashboard.panels.Count -lt 6) { throw 'Grafana dashboard is not provisioned.' }
+            if (-not $dashboard.meta.provisioned -or $dashboard.dashboard.panels.Count -lt 8) { throw 'Grafana dashboard is not provisioned.' }
         }
     }
 } finally {

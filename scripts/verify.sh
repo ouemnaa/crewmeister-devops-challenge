@@ -60,6 +60,8 @@ done
 [[ "$("${kube[@]}" get service crewmeister-app crewmeister-mysql --output='jsonpath={.items[*].spec.type}')" == 'ClusterIP ClusterIP' ]] || fail 'Project services must be internal ClusterIP services.'
 [[ "$(query_mysql 'SELECT 1;')" == 1 ]] || fail 'MySQL is not responding.'
 
+: >"$log_prefix.log"
+: >"$log_prefix.err"
 "${kube[@]}" port-forward --address 127.0.0.1 service/crewmeister-app :8080 >"$log_prefix.log" 2>"$log_prefix.err" &
 forward_pid=$!
 port=''
@@ -87,6 +89,8 @@ metrics="$("${http[@]}" "$base_url/actuator/prometheus")"
 [[ "$metrics" == *jvm_memory_used_bytes* && "$metrics" == *http_server_requests_seconds_count* ]] || fail 'Expected JVM and HTTP metrics are missing.'
 for service in crewmeister-monitoring-prometheus:9090 crewmeister-grafana:80; do
     prefix="$log_prefix-${service%:*}"
+    : >"$prefix.log"
+    : >"$prefix.err"
     "${kube[@]}" port-forward --address 127.0.0.1 "service/${service%:*}" ":${service##*:}" >"$prefix.log" 2>"$prefix.err" &
     monitor_pids+=("$!")
     port=''
@@ -101,11 +105,11 @@ for service in crewmeister-monitoring-prometheus:9090 crewmeister-grafana:80; do
     if [[ "$service" == crewmeister-monitoring-prometheus:* ]]; then
         up=false
         for attempt in {1..100}; do
-            result="$("${http[@]}" --get --data-urlencode 'query=up{namespace="crewmeister",service="crewmeister-app"}' "$url/api/v1/query")"
+            result="$("${http[@]}" --get --data-urlencode 'query=(up{namespace="crewmeister",service="crewmeister-app"} == 1) and on() (mysql_up{namespace="crewmeister",service="crewmeister-mysql-exporter"} == 1)' "$url/api/v1/query")"
             if [[ "$result" =~ \"value\":\[[^]]*,\"1\"\] ]]; then up=true; break; fi
             sleep 3
         done
-        [[ "$up" == true ]] || fail 'Prometheus application target is not UP.'
+        [[ "$up" == true ]] || fail 'Prometheus application target or MySQL exporter is not UP.'
     else
         health="$("${http[@]}" "$url/api/health")"
         [[ "$health" =~ \"database\"[[:space:]]*:[[:space:]]*\"ok\" ]] || fail 'Grafana is unhealthy.'

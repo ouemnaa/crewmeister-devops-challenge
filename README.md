@@ -1,6 +1,6 @@
 # Crewmeister DevOps assessment
 
-Run the Java 17 / Spring Boot API and MySQL on local Kubernetes using Docker, Kind, Terraform and Helm. Prometheus and Grafana are included. No cloud account is required.
+Run the Java 17 / Spring Boot 3.5.16 API and MySQL on local Kubernetes using Docker, Kind, Terraform and Helm. Prometheus and Grafana are included. No cloud account is required.
 
 The [original assessment](docs/assessment.md) is preserved separately. See [validation evidence](docs/validation.md) for checks performed and limitations.
 
@@ -77,6 +77,8 @@ Two Terraform stages avoid configuring Helm before Kubernetes exists. Terraform 
 All services are internal ClusterIP services in namespace `crewmeister`. The application runs as user 10001 with dropped capabilities, no service-account token, a read-only root filesystem and writable `/tmp`. Probes use Actuator; readiness includes the database. Terraform generates separate application/root database secrets. The application and exporter receive only the application account.
 
 MySQL's PVC preserves data across pod replacement. Destroying the namespace or cluster deletes the data. Prometheus retains six hours of disposable metrics. Grafana's datasource and dashboard are provisioned from version-controlled files. Alertmanager, node exporter, control-plane scrapes and default dashboards are disabled to reduce resource use.
+
+Monitoring probes allow startup time on a busy machine. Grafana's [optional plugin preinstallation](https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#preinstall_disabled) is disabled so startup does not download unpinned plugins.
 
 ## Image delivery
 

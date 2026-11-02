@@ -54,16 +54,35 @@ prometheus:
         memory: 768Mi
 
 kube-state-metrics:
+  startupProbe:
+    enabled: true
+    failureThreshold: 30
+  livenessProbe:
+    failureThreshold: 6
   resources:
     requests:
       cpu: 20m
       memory: 32Mi
     limits:
-      cpu: 200m
+      cpu: 500m
       memory: 128Mi
 
 grafana:
   fullnameOverride: crewmeister-grafana
+  startupProbe:
+    httpGet:
+      path: /api/health
+      port: grafana
+    failureThreshold: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+  grafana.ini:
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+      check_for_plugin_updates: false
+    plugins:
+      preinstall_disabled: true
   defaultDashboardsEnabled: false
   initChownData:
     enabled: false
