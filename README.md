@@ -321,13 +321,14 @@ The setup scripts instead write their selected image settings to the ignored
 `-var-file=../../.local/image.auto.tfvars.json` for subsequent platform plan/apply
 commands to preserve that image selection.
 
-Once the platform is deployed, destroy it **before** the cluster:
+Use the teardown script for your shell to destroy the platform **before** the cluster:
 
-```text
-terraform -chdir=terraform/platform destroy
-terraform -chdir=terraform/cluster destroy
-kind get clusters
-docker ps -a --filter label=io.x-k8s.kind.cluster=crewmeister
+```powershell
+.\scripts\down.ps1
+```
+
+```bash
+bash scripts/down.sh
 ```
 
 Platform destruction deletes the project namespace and its database PVC. This
@@ -438,3 +439,31 @@ The scripts delete their test user and stop the port forward on completion or
 failure. They use the dedicated project kubeconfig and context and work from
 any current directory. Bash verification also requires `curl`. A failed check
 returns a nonzero exit code; logs for port forwarding stay under ignored `.local/`.
+
+### Teardown behavior
+
+Teardown is unattended: it applies saved Terraform destroy plans without an
+interactive confirmation. Run it only when you intend to delete the project's
+database and infrastructure.
+
+Before planning deletion, the scripts check the expected Terraform resource
+addresses and names, dedicated kubeconfig path, Kind node container, live API
+port, and Terraform's recorded certificate authority. They refuse a mismatched
+target, unexpected resources, or infrastructure with missing ownership state.
+They use the explicit project context throughout.
+
+Both stages are planned before deletion begins. The platform is destroyed first;
+if that fails, the cluster remains available for troubleshooting. After successful
+cluster destruction, the scripts confirm that the project Kind node containers
+are gone. A repeated teardown succeeds without action when both stages and the
+cluster are already absent.
+
+The scripts leave cached images, the shared Kind Docker network, and unrelated
+containers, volumes, and Kubernetes contexts alone. Provider caches and local
+Terraform files are retained for the next setup. State backups may still contain
+old credentials and remain private. Temporary destroy-plan files are removed on
+exit; they are also covered by the repository's ignore rules.
+
+All lifecycle scripts work from any current directory. PowerShell restores the
+caller's path, kubeconfig environment variable, and Kind provider selection even
+when a check fails. Bash scripts run in their own shell process.
