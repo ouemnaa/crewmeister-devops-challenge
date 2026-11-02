@@ -7,6 +7,8 @@ $ErrorActionPreference = 'Stop'
 function Invoke-Checked {
     param([string]$Program, [string[]]$CommandArgs)
 
+    # Native stderr may contain progress; use the process exit code for failure.
+    $ErrorActionPreference = 'Continue'
     & $Program @CommandArgs
     if ($LASTEXITCODE -ne 0) {
         throw "$Program failed with exit code $LASTEXITCODE."
