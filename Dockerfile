@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-noble@sha256:53686f59c44e08ac3310d39ef9c3e3d3bb03370366d9c45802229c86fa2d8369 AS build
+FROM eclipse-temurin:24-jdk-noble@sha256:dacac8e9a0df0d2bd24e702b4431132875c249930b70555ebd7ca285b5bee684 AS build
 
 WORKDIR /workspace
 COPY pom.xml mvnw ./
@@ -8,7 +8,7 @@ COPY src/ src/
 # Integration tests require MySQL and run separately with `mvnw clean verify`.
 RUN --mount=type=cache,target=/root/.m2 sh ./mvnw --batch-mode -DskipTests package
 
-FROM eclipse-temurin:17-jre-noble@sha256:e13d2fc95a199cda333a2d8ce67a48727029dda50782bb8ecaced710932ac920 AS runtime
+FROM eclipse-temurin:24-jre-noble@sha256:b416d02335e702b0403ff280de9475a3348e29382285969c9d4e17862ce632e7 AS runtime
 
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app
