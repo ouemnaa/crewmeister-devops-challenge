@@ -415,39 +415,12 @@ To run it in your own account, use a fresh checkout, your own temporary-credenti
 - **Trivy is report-only:** inherited application vulnerabilities stay visible instead of being hidden, and scanner errors still fail CI.
 - **SonarCloud through its GitHub integration:** analysis needs no token, so local reviewers need no extra setup.
 
-## Known limitations and tested platforms
+## Known limitations
 
-The recorded **3 November 2026** image scan found **2 CRITICAL**, 0 HIGH, 28 MEDIUM and 4 LOW findings. Both critical findings affect `org.springframework:spring-webmvc` **6.2.19**; Trivy lists **7.0.9** as fixed.
-
-| Trivy finding | Status |
-| --- | --- |
-| CVE-2026-47884 | Open; no upgrade or suppression |
-| CVE-2026-47890 | Open; no upgrade or suppression |
-
-See [critical-finding details and upstream severity differences](docs/validation.md#critical-findings-unchanged). A major Spring Boot upgrade was not performed. A green CI run does not mean the image has no vulnerabilities; read the current CI artifacts for newer data.
-
-- **Published architecture:** `linux/amd64` only. There is no published ARM64 image and no verified Apple Silicon deployment. CI publishes SHA tags, not release tags.
-- **SonarCloud:** one low-severity "debug feature" finding in `UserController` is left open.
-- **Network isolation:** no NetworkPolicies. ClusterIP Services do not restrict pod-to-pod access.
-- **Availability and data:** one local node or one AWS worker, no high availability and no production backup workflow. MySQL data survives pod recreation but teardown deletes it. Monitoring storage is ephemeral.
-- **Public API:** the optional AWS HTTP exposure has no application authentication and no TLS unless an existing certificate and domain are configured.
-- **Credentials:** generated at deployment, stored in Kubernetes Secrets and plaintext Terraform state; private local files need protection.
-- **Standalone chart:** its `local` image default is a development placeholder; setup supplies the real image and database settings.
-
-| Platform or lifecycle | Recorded coverage |
-| --- | --- |
-| Windows 11 Pro + Docker Desktop | Fresh-clone local setup, verification and teardown passed on 3 November 2026 |
-| WSL2 Ubuntu 22.04.5 + Docker Desktop | Earlier fresh-clone local lifecycle passed; not rerun in the latest audit |
-| AWS from Windows PowerShell 5.1 | Existing partial deployment completed; application, EBS persistence, monitoring and public-path checks passed |
-| Native Linux with standalone Docker Engine | **Untested** |
-| Native macOS | **Untested** |
-| Apple Silicon / ARM64 deployment | **Untested** |
-| AWS lifecycle using Bash | **Untested live**; syntax and offline guard checks only |
-| Fresh-account, fresh-clone full AWS lifecycle | **Untested**; recorded live work recovered an existing deployment |
-| Independent second-network AWS HTTP check | **Untested**; security-group configuration was inspected |
-| OS-specific Bash clipboard integration | **Untested** |
-| Complete AWS teardown and leftover audit | **Not recorded as complete** |
-
+- **Security scan:** the image scan on 3 November 2026 reported 2 critical findings in `spring-webmvc` 6.2.19 (CVE-2026-47884, CVE-2026-47890), fixed only in Spring Framework 7. They are open; fixing them needs a major Spring Boot upgrade. Details are in [validation evidence](docs/validation.md#critical-findings-unchanged).
+- **Platforms:** tested on Windows 11 with Docker Desktop and on WSL2 Ubuntu. Native Linux, macOS and Apple Silicon are untested, and the published image is `linux/amd64` only.
+- **Scope:** one node, no high availability, no backups. Teardown deletes the MySQL data.
+  
 ## Repository layout
 
 ```text
