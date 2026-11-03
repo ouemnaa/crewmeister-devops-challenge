@@ -3,8 +3,23 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:AwsRepoRoot = Split-Path -Parent $PSScriptRoot
 
+function Resolve-AwsTool {
+    param([string]$Name)
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    # Use the repository's pinned kubectl, as the Kind scripts do. Keep test
+    # functions available for offline safety checks; do not change session PATH.
+    if ($Name -eq 'kubectl' -and (-not $command -or $command.CommandType -ne 'Function')) {
+        foreach ($candidate in @('kubectl.exe','kubectl')) {
+            $localTool = Join-Path $script:AwsRepoRoot ".local/bin/$candidate"
+            if (Test-Path -LiteralPath $localTool -PathType Leaf) { return $localTool }
+        }
+    }
+    if (-not $command) { throw "Missing prerequisite: $Name." }
+    return $Name
+}
 function Invoke-AwsChecked {
     param([string]$Program, [string[]]$CommandArgs)
+    $Program = Resolve-AwsTool $Program
     $ErrorActionPreference = 'Continue'
     $result = & $Program @CommandArgs
     if ($LASTEXITCODE -ne 0) { throw "$Program failed (exit $LASTEXITCODE)." }
@@ -26,7 +41,7 @@ function Assert-AwsTools {
         if ((Test-Path -LiteralPath $workspaceFile) -and (Get-Content -LiteralPath $workspaceFile -Raw).Trim() -ne 'default') { throw "Unexpected workspace in AWS $stage root." }
     }
     foreach ($tool in @('aws', 'terraform', 'helm', 'kubectl')) {
-        if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Missing prerequisite: $tool." }
+        $null = Resolve-AwsTool $tool
     }
     $version = Invoke-AwsChecked terraform @('version', '-json') | ConvertFrom-Json
     if ($version.terraform_version -ne '1.15.8') { throw 'Terraform 1.15.8 is required.' }

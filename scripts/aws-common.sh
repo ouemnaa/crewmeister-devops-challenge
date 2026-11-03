@@ -3,6 +3,10 @@
 set -euo pipefail
 umask 077
 aws_repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# Match the Kind scripts' repository-local tool preference in this child shell.
+if [[ -d "$aws_repo_root/.local/bin" ]]; then
+    export PATH="$aws_repo_root/.local/bin:$PATH"
+fi
 
 aws_fail() { echo "$*" >&2; exit 1; }
 aws_tools() {

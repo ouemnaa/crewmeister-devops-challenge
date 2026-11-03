@@ -67,7 +67,8 @@ Sources: [EKS pricing](https://aws.amazon.com/eks/pricing/), [EC2 pricing](https
 
 Use Terraform **1.15.8**, Helm **4.3.1**, AWS CLI **v2**, kubectl **1.35–1.37**, Git 2.x;
 Bash additionally needs **Bash 4+ and jq 1.6+**. Windows scripts support PowerShell 5.1+.
-Put the correct binaries on PATH; the repository's ignored `.local/bin` may contain the kubectl used by Kind.
+Put the correct binaries on PATH. AWS scripts prefer the repository's ignored `.local/bin/kubectl` (or `kubectl.exe`)
+when present, matching the Kind setup; otherwise install a supported kubectl on PATH.
 Docker is optional for anonymous image inspection. Linux/macOS AWS lifecycle execution is pending live validation;
 Git Bash syntax checks do not establish native Linux/macOS compatibility.
 
