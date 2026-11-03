@@ -113,10 +113,15 @@ If a port is already in use, change the local port number (before the colon) in 
 </details>
 
 
-### 1. Create and verify the local environment
+### 1. Create and Verify the Local Environment
 
-<details>
-<summary>Windows PowerShell: check tools, clone, set up and verify</summary>
+Choose your operating system and follow the commands below to deploy and verify the complete Kubernetes stack.
+
+#### Windows — PowerShell
+
+**1. Check prerequisites**
+
+Make sure Docker Desktop is running with Linux containers enabled.
 
 ```powershell
 terraform version
@@ -124,21 +129,36 @@ kind version
 kubectl version --client
 helm version --short
 docker info --format '{{.OSType}}'
+```
 
+Docker should report `linux`.
+
+**2. Clone the repository**
+
+```powershell
 git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
 cd crewmeister-devops-challenge
+```
+
+**3. Deploy the environment**
+
+```powershell
 .\scripts\setup.ps1
+```
+
+**4. Verify the deployment**
+
+```powershell
 .\scripts\verify.ps1
 ```
 
-Docker must report `linux`. If script execution is blocked, use a separate PowerShell process, for example `powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1`; no machine-wide policy change is required.
+> If PowerShell blocks script execution, run the script using `powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1`. This does not change the machine-wide execution policy.
 
-</details>
+#### Linux / WSL2 / macOS — Bash
 
-<details>
-<summary>WSL/Linux and macOS: check tools, clone, set up and verify</summary>
+**1. Check prerequisites**
 
-These Bash commands were exercised under WSL2 Ubuntu. The same script entry points are provided for native Linux and macOS, but those platforms have not been tested. Apple Silicon has no verified deployment path and the published image is amd64-only; do not assume these commands establish ARM64 support.
+Ensure Docker is running and accessible from your terminal.
 
 ```bash
 terraform version
@@ -146,16 +166,32 @@ kind version
 kubectl version --client
 helm version --short
 docker info --format '{{.OSType}}'
+```
 
+Docker should report `linux`.
+
+**2. Clone the repository**
+
+```bash
 git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
 cd crewmeister-devops-challenge
+```
+
+**3. Deploy the environment**
+
+```bash
 bash scripts/setup.sh
+```
+
+**4. Verify the deployment**
+
+```bash
 bash scripts/verify.sh
 ```
 
-Use Linux binaries inside WSL and enable Docker Desktop integration for that distribution.
+**Platform support:** The Bash workflow has been tested on WSL2 Ubuntu. Native Linux and macOS remain untested. The published image is amd64-only, so Apple Silicon compatibility is not established.
 
-</details>
+For WSL2, use Linux CLI binaries and enable Docker Desktop integration for your distribution.
 
 Setup creates one Kind node and four releases: MySQL, application, monitoring and MySQL exporter. The local scripts apply Terraform automatically for this dedicated environment. They use `.local/crewmeister.kubeconfig` and context `kind-crewmeister`, leaving the default kubeconfig untouched.
 
