@@ -2,7 +2,12 @@
 # Offline regression checks: no real cloud commands are possible.
 set -euo pipefail
 umask 077
-repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+source_repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Do not let initialized deployment backend metadata influence offline fixtures.
+repo="$source_repo/.local/aws-validation/bash-guards-$$-$RANDOM"
+[[ ! -e "$repo" ]] || { echo 'Refusing existing fixture checkout.' >&2; exit 1; }
+mkdir -p "$repo/scripts"
+cp "$source_repo/scripts/aws-common.sh" "$source_repo/scripts/aws-setup.sh" "$repo/scripts/"
 cd "$repo"
 name="crewmeister-aws-tests-bash-$$"
 relative=".local/aws/$name-input.json"

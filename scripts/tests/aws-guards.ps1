@@ -1,7 +1,14 @@
 # Offline regression checks: every external tool/AWS call is stubbed.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$sourceRepo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+# Isolate metadata too: these checks must also run after a real S3 backend has
+# been initialized in the checkout, without consulting its account settings.
+$repo = Join-Path $sourceRepo ('.local/aws-validation/ps-guards-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path (Join-Path $repo 'scripts') -Force | Out-Null
+foreach ($scriptName in @('aws-common.ps1','aws-setup.ps1')) {
+    Copy-Item -LiteralPath (Join-Path $sourceRepo "scripts/$scriptName") -Destination (Join-Path $repo "scripts/$scriptName")
+}
 $name = "crewmeister-aws-tests-$PID"
 $relative = ".local/aws/$name-input.json"
 $fixture = Join-Path $repo $relative
@@ -10,7 +17,7 @@ if ((Test-Path -LiteralPath $fixture) -or (Test-Path -LiteralPath $privateDir)) 
 New-Item -ItemType Directory -Path (Split-Path -Parent $fixture) -Force | Out-Null
 $global:AwsGuardAccount = '111122223333'
 $global:AwsGuardCalls = 0
-function global:aws {
+function aws {
     $global:LASTEXITCODE = 0
     if ($args -contains '--version') { return 'aws-cli/2.38.4 test-only' }
     $global:AwsGuardCalls++
@@ -18,9 +25,9 @@ function global:aws {
     if ($args[0] -eq 'iam' -and $args[1] -eq 'get-role') { return '{"Role":{"Arn":"arn:aws:iam::111122223333:role/Testing"}}' }
     throw 'Unexpected AWS operation in offline test.'
 }
-function global:terraform { $global:LASTEXITCODE=0; if ($args[0] -eq 'version') { return '{"terraform_version":"1.15.8"}' }; throw 'Unexpected Terraform operation.' }
-function global:helm { $global:LASTEXITCODE=0; if ($args[0] -eq 'version') { return 'v4.3.1+test' }; throw 'Unexpected Helm operation.' }
-function global:kubectl { $global:LASTEXITCODE=0; if ($args[0] -eq 'version') { return '{"clientVersion":{"gitVersion":"v1.36.4"}}' }; throw 'Unexpected Kubernetes operation.' }
+function terraform { $global:LASTEXITCODE=0; if ($args[0] -eq 'version') { return '{"terraform_version":"1.15.8"}' }; throw 'Unexpected Terraform operation.' }
+function helm { $global:LASTEXITCODE=0; if ($args[0] -eq 'version') { return 'v4.3.1+test' }; throw 'Unexpected Helm operation.' }
+function kubectl { $global:LASTEXITCODE=0; if ($args[0] -eq 'version') { return '{"clientVersion":{"gitVersion":"v1.36.4"}}' }; throw 'Unexpected Kubernetes operation.' }
 $config = @{
     aws_profile='testing'; aws_region='eu-north-1'; expected_account_id='111122223333'
     cluster_name=$name; state_bucket='crewmeister-offline-test'
