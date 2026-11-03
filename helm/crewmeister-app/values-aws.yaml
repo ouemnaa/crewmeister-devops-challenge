@@ -1,0 +1,10 @@
+# Terraform supplies the owner-selected public GHCR repository and full SHA.
+# The sentinel deliberately cannot be deployed by the AWS Terraform validation.
+image:
+  repository: ghcr.io/ouemnaa/crewmeister-devops-challenge
+  tag: SET_FULL_COMMIT_SHA
+  pullPolicy: IfNotPresent
+
+serviceMonitor:
+  enabled: true
+  release: crewmeister-monitoring
