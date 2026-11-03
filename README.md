@@ -55,30 +55,33 @@ flowchart LR
 
 ## Quick start (local)
 
-**Tested:** Windows 11 Pro with Docker Desktop and WSL2 Ubuntu 22.04.5 with Docker Desktop integration. Native Linux, native macOS and Apple Silicon are untested. Use the same OS environment and checkout for setup, verification and teardown; Terraform state records native paths.
+**You need:** Docker (Linux containers, at least 4 CPUs and 6 GiB RAM), plus Terraform, Kind, kubectl and Helm. The first run takes about **11 minutes** on Windows.
 
-A recorded fresh Windows setup took **647.3 seconds, about 11 minutes**. Allow more time for downloads or a local image build. Allocate at least 4 CPUs and 6 GiB RAM to Docker; 8 GiB leaves more room during builds. Start Docker with Linux containers and allow access to GitHub, Maven Central, chart repositories and container registries.
+**Tested on:** Windows 11 with Docker Desktop, and WSL2 Ubuntu. Native Linux, macOS and Apple Silicon are untested. Run setup, verification and teardown from the same environment (don't mix Windows and WSL on one checkout).
 
-| Prerequisite | Version used or required |
+| Tool | Version |
 | --- | --- |
-| Docker Desktop / Engine | Engine **28.0.4** tested; Linux containers required |
-| Terraform | **1.15.8**, enforced by setup |
-| Kind | **0.33.0**, enforced by setup |
-| kubectl | **1.36.4** tested; clients **1.35–1.37** accepted |
-| Helm | **4.3.1** |
-| Git | **2.x**; no patch version is pinned |
-| Windows shell | PowerShell **5.1+** |
-| Bash path | Bash **5.1/5.2** tested and curl **7.81+**; WSL needs Docker Desktop integration |
+| Docker | Engine 28.0.4 tested |
+| Terraform | 1.15.8 (enforced by setup) |
+| Kind | 0.33.0 (enforced by setup) |
+| kubectl | 1.35 to 1.37 (1.36.4 tested) |
+| Helm | 4.3.1 |
+| Shell | PowerShell 5.1+, or Bash 5.1+ with curl 7.81+ |
 
-Install binaries for your OS and CPU on `PATH`. Docker supplies Java 17 for image builds, so a host JDK is not needed for setup. Prefer cgroup v2; setup enables Kubernetes' documented cgroup-v1 compatibility setting when needed without changing the host.
+Local ports used: API **18080**, Grafana **13000**, Prometheus **19090**. If one is taken, change the number before the colon in the port-forward command.
 
-| Access | Local port | Kubernetes port |
-| --- | --- | --- |
-| API | **18080** | 8080 |
-| Grafana | **13000** | Service 80, container 3000 |
-| Prometheus | **19090** | 9090 |
-| MySQL / exporter | Internal only | 3306 / 9104 |
-| Kind API | Random localhost port | Managed by Kind |
+<details>
+<summary>More notes on requirements</summary>
+
+- Put the binaries for your OS and CPU on `PATH`. Git 2.x is needed to clone.
+- No host JDK is needed: Docker builds the image with Java 17.
+- Docker needs access to GitHub, Maven Central, chart repositories and container registries. 8 GiB of RAM leaves more room during local image builds.
+- Prefer cgroup v2. When needed, setup enables Kubernetes' cgroup-v1 compatibility setting, without changing the host.
+- MySQL (3306) and its exporter (9104) are internal only. The Kind API uses a random localhost port.
+- WSL needs Docker Desktop integration enabled.
+
+</details>
+
 
 ### 1. Create and verify the local environment
 
