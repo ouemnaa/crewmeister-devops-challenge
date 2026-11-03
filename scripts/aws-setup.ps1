@@ -11,6 +11,15 @@ Read-AwsConfig $ConfigPath
 Assert-AwsIdentity
 $c = $script:AwsConfig
 if ($Mode -eq 'Guard') {
+    if ($Stage -eq 'bootstrap') {
+        $bootstrapState = Join-Path $script:AwsRepoRoot '.local/aws/bootstrap.tfstate'
+        if (Test-Path -LiteralPath $bootstrapState) {
+            $state = Get-Content -LiteralPath $bootstrapState -Raw | ConvertFrom-Json
+            $buckets = @($state.resources | Where-Object { $_.mode -eq 'managed' -and $_.type -eq 'aws_s3_bucket' -and $_.name -eq 'state' })
+            if ($buckets.Count -ne 1 -or @($buckets[0].instances).Count -ne 1 -or $buckets[0].instances[0].attributes.bucket -ne $c.state_bucket) { throw 'Existing bootstrap state does not match the selected bucket; recovery review is required.' }
+            Assert-AwsBackend
+        }
+    }
     if ($Stage -ne 'bootstrap') { Assert-AwsBackend }
     if ($Stage -eq 'platform') {
         $cluster = Assert-AwsCluster

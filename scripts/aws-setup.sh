@@ -12,7 +12,14 @@ aws_config "$aws_config_path"
 aws_identity
 if [[ "$aws_mode" == guard ]]; then
     case "$aws_stage" in
-        bootstrap) ;;
+        bootstrap)
+            if [[ -f "$aws_repo_root/.local/aws/bootstrap.tfstate" ]]; then
+                jq -e --arg bucket "$state_bucket" '
+                  [.resources[] | select(.mode == "managed" and .type == "aws_s3_bucket" and .name == "state")] |
+                  length == 1 and (.[0].instances | length == 1) and .[0].instances[0].attributes.bucket == $bucket
+                ' "$aws_repo_root/.local/aws/bootstrap.tfstate" >/dev/null || aws_fail 'Existing bootstrap state bucket mismatch; recovery review required.'
+                aws_backend
+            fi ;;
         cluster) aws_backend ;;
         platform)
             aws_backend; aws_cluster; aws_check_kubeconfig

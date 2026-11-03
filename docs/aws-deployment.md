@@ -131,6 +131,7 @@ Use one AWS deployment per backend bucket and checkout. Never use a Kind workspa
 Only the default workspace is supported. New roots use independent provider locks and exact provider versions.
 
 Bootstrap's local backend is explicitly `.local/aws/bootstrap.tfstate`, relative to the repository root.
+The bootstrap guard rejects an existing state for a different bucket and verifies backend protections when that state already exists.
 It creates an owner-selected S3 bucket with versioning, AES256 encryption, blocked public access, TLS-only access
 and restricted principals. The normal operator and an account-root recovery principal are admitted by the restriction;
 this does not grant permissions by itself and is not a recommendation to operate as root.
