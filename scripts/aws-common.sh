@@ -122,6 +122,7 @@ aws_check_kubeconfig() {
       .users[0].user.exec.command == "aws" and
       .users[0].user.exec.args == ["eks","get-token","--cluster-name",$name,"--profile",$profile,"--region",$region]
     ' <<<"$view" >/dev/null || aws_fail 'Dedicated kubeconfig endpoint, CA or credential command mismatch.'
+    aws_kube --request-timeout=15s get --raw=/readyz >/dev/null || aws_fail 'EKS API unreachable; check that your current public IP matches the configured API CIDR.'
 }
 aws_static() {
     aws_tools

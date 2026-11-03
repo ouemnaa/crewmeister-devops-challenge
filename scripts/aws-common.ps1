@@ -143,6 +143,7 @@ function Assert-AwsKubeconfig {
     $exec = $view.users[0].user.exec
     $expectedArgs = @('eks','get-token','--cluster-name',$script:AwsConfig.cluster_name,'--profile',$script:AwsConfig.aws_profile,'--region',$script:AwsConfig.aws_region)
     if ($exec.command -ne 'aws' -or (($exec.args -join '|') -ne ($expectedArgs -join '|'))) { throw 'Kubeconfig credential command mismatch; regenerate the dedicated file safely.' }
+    $null = Invoke-AwsKube @('--request-timeout=15s','get','--raw=/readyz')
 }
 function Invoke-AwsStaticValidation {
     Assert-AwsTools
