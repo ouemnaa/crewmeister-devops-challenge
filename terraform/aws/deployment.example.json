@@ -1,0 +1,15 @@
+{
+  "aws_profile": "crewmeister-aws",
+  "aws_region": "eu-north-1",
+  "expected_account_id": "REPLACE_WITH_YOUR_ACCOUNT",
+  "cluster_name": "crewmeister-aws",
+  "state_bucket": "REPLACE_WITH_YOUR_UNIQUE_BUCKET",
+  "operator_role_arn": "REPLACE_WITH_YOUR_DURABLE_IAM_ROLE_ARN",
+  "api_access_cidrs": ["203.0.113.10/32"],
+  "client_access_cidrs": ["203.0.113.10/32"],
+  "image_repository": "ghcr.io/ouemnaa/crewmeister-devops-challenge",
+  "image_tag": "REPLACE_WITH_PUBLISHED_FULL_COMMIT_SHA",
+  "enable_public_ingress": false,
+  "allow_unrestricted_api": false,
+  "certificate_arn": null
+}

@@ -1,0 +1,7 @@
+# Overlay on the existing pinned MySQL configuration; Kind values are untouched.
+storage:
+  className: crewmeister-gp3
+  requestedSize: 2Gi
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain

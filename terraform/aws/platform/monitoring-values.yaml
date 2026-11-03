@@ -1,0 +1,6 @@
+# The shared lightweight configuration remains unchanged for Kind.
+prometheus:
+  prometheusSpec:
+    retention: 2h
+    retentionSize: 512MB
+    # Demo monitoring data is intentionally ephemeral; only MySQL needs EBS.

@@ -4,6 +4,8 @@ Run the Java 17 / Spring Boot 3.5.16 API and MySQL on local Kubernetes using Doc
 
 The [original assessment](docs/assessment.md) is preserved separately. See [validation evidence](docs/validation.md) for checks performed and limitations.
 
+The optional [AWS EKS extension](docs/aws-deployment.md) uses isolated Terraform state and EKS Pod Identity. The application, EBS persistence and monitoring were verified on AWS from Windows PowerShell; see the guide for evidence, limitations and controlled deployment/cleanup steps.
+
 **Tested on:** Windows 11 Pro with Docker Desktop (Engine 28.0.4), and WSL2 Ubuntu 22.04.5 using Docker Desktop integration. Native macOS and standalone Linux Docker Engine are untested.
 
 The 2026-11-03 pre-submission audit repeated the complete fresh-clone lifecycle on Windows. WSL coverage is from the earlier validation; a new WSL lifecycle was not run in this audit at the owner's request.
