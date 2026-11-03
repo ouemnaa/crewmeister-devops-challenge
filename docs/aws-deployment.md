@@ -1,6 +1,6 @@
 # Optional AWS EKS deployment
 
-**Status: Phase B configuration, statically validated locally. No AWS deployment has been performed.**
+**Status: live AWS application, public API isolation, EBS persistence and monitoring verified from Windows PowerShell on 3 November 2026.**
 The free [Kind quick start](../README.md#quick-start) remains the primary reviewer path.
 AWS is optional and requires your own permitted account, temporary credentials and explicit approval of billable plans.
 
@@ -18,7 +18,9 @@ A successful static check is not evidence of a working EKS deployment.
 - Private EKS endpoint enabled; public EKS endpoint restricted to approved administrator IPv4 CIDRs (/32 preferred).
 - AL2023 managed node image, encrypted 30 GiB gp3 root disk, IMDSv2, hop limit 1.
   The managed node AMI is selected by EKS at creation; its exact release still needs review in Phase C.
-- Separate IRSA roles for VPC CNI, EBS CSI and AWS Load Balancer Controller. Trust policies restrict both issuer audience and service account.
+- Separate EKS Pod Identity roles for VPC CNI, EBS CSI and AWS Load Balancer Controller.
+  Trust policies restrict cluster ARN, namespace and service account through session tags.
+  The pinned Pod Identity agent is installed before CNI and worker creation; the node role already permits EKS Auth.
   Worker permissions use AWS worker-node and ECR pull policies; application containers receive no AWS credentials.
   The controller IAM policy is vendored unchanged from the [pinned v3.6.2 upstream policy](https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/v3.6.2/docs/install/iam_policy.json).
   It includes optional integration permissions; WAF, WAFv2 and Shield integrations are disabled in the chart.
@@ -32,6 +34,12 @@ A successful static check is not evidence of a working EKS deployment.
 
 This is a disposable demonstration, not a highly available production design. A node replacement or update can interrupt every workload.
 Spot is deliberately excluded to avoid interruption during recording.
+
+The initial IRSA deployment was blocked by an account service control policy denying
+`iam:CreateOpenIDConnectProvider`. Pod Identity uses supported EKS associations instead of an IAM OIDC provider;
+no account upgrade, organization-policy change or broader node permissions are required by this configuration.
+Availability remains subject to the reviewer's own account policies. See
+[AWS Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html).
 
 ## Account eligibility and cost
 
@@ -172,6 +180,9 @@ If Terraform reports unexpected existing state/backend configuration, stop and i
 
 Set paths once in PowerShell:
 
+PowerShell variables belong to the current terminal. Repeat this block after opening a new terminal.
+Run native commands individually and stop on any failure; a failed guard must never be followed by apply.
+
 ```powershell
 $env:TF_WORKSPACE = 'default'
 $config = Get-Content .local/aws/deployment.json -Raw | ConvertFrom-Json
@@ -291,7 +302,9 @@ For PowerShell, define a helper in the current session:
 
 ```powershell
 $kube = Join-Path $privateDir "$($config.cluster_name).kubeconfig"
-function k { & kubectl --kubeconfig $kube --context $config.cluster_name --namespace crewmeister @args; if ($LASTEXITCODE -ne 0) { throw 'kubectl failed' } }
+$kubectl = 'kubectl'
+if (Test-Path .local/bin/kubectl.exe) { $kubectl = (Resolve-Path .local/bin/kubectl.exe).Path }
+function k { & $kubectl --kubeconfig $kube --context $config.cluster_name --namespace crewmeister @args; if ($LASTEXITCODE -ne 0) { throw 'kubectl failed' } }
 k port-forward --address 127.0.0.1 service/crewmeister-app 18080:8080
 ```
 
@@ -300,6 +313,7 @@ Bash equivalent:
 ```bash
 cluster_name="$(jq -r .cluster_name .local/aws/deployment.json)"
 kube="$private_dir/$cluster_name.kubeconfig"
+export PATH="$PWD/.local/bin:$PATH"
 k() { kubectl --kubeconfig "$kube" --context "$cluster_name" --namespace crewmeister "$@"; }
 k port-forward --address 127.0.0.1 service/crewmeister-app 18080:8080
 ```
@@ -322,7 +336,7 @@ For persistence acceptance, record the test user's actual ID from MySQL using au
 (the existing Kind verification scripts illustrate using the pod's environment without printing the password).
 Do not guess an ID. After explicit approval of the brief demo interruption, delete only `crewmeister-mysql-0`,
 wait for its StatefulSet rollout, reconnect the application forward if necessary, and GET the recorded ID.
-Confirm the same PVC/volume remains and the test record survives. This check is pending live deployment.
+Confirm the same PVC/volume remains and the test record survives. This check passed during the Windows AWS validation.
 
 Monitoring forwards:
 
@@ -337,7 +351,9 @@ never print the password into terminal output or recordings. There is no admin/a
 Confirm application and MySQL exporter targets are UP and the Crewmeister dashboard has data.
 
 Enable ingress last using a **new reviewed platform plan** with `-var=enable_public_ingress=true`,
-then apply only that approved saved plan. Initial private inputs remain false for safety.
+then apply only that approved saved plan. Initial private inputs are false for safety; after successful acceptance,
+record the approved enabled state in your ignored deployment/platform inputs so subsequent plans preserve it.
+The committed example and Terraform defaults remain false.
 The chosen client CIDRs constrain the ALB security group.
 Without a certificate this is restricted HTTP for dummy demonstration data, not secure transport.
 For HTTPS, supply an existing Stockholm ACM certificate and use its matching domain pointed at the ALB;
@@ -395,11 +411,43 @@ application Helm lint/render; MySQL/monitoring/controller chart rendering; Power
 offline regression checks for profile/CIDR/account rejection and private-file overwrite protection;
 local Git diff/secret review. See the final Phase B report for actual executed results.
 
-Pending Phase C: Free-plan entitlement, real plans, node/add-on scheduling, GHCR pull, EBS persistence,
-API path isolation, monitoring targets/dashboard, timings, full Windows/Bash deployment and complete teardown.
+Live Windows checks passed: the existing partial deployment was completed using reviewed plans; one node and the
+Pod Identity/CNI/EBS add-ons became ready; the public GHCR image ran; encrypted gp3 storage bound; GET/POST and
+health/metrics worked; the same data/PVC survived MySQL pod recreation; Prometheus application/exporter targets
+were UP; Grafana was healthy and its dashboard was provisioned. Test rows and temporary port-forwards were removed.
+
+This was recovery and completion of an existing AWS deployment, not a fresh-account/fresh-clone AWS lifecycle test.
+Node Kubernetes was 1.36.5 and the managed node release was 1.36.5-20261031.
+The tested application image tag was `c6a1738c336e004f117af27cd52773e09aed0ffb`.
+One successful Flyway migration was present in the database. Final cluster and platform plans both reported no changes.
+Account restrictions allowed Pod Identity, managed nodes and encrypted EBS without an account upgrade.
+The account still reported Free plan / Active after deployment.
+This does not establish eligibility for other accounts or a guarantee about future policy changes.
+
+Public API acceptance also passed: the ALB target was healthy; GET/POST and persisted readback worked through its
+hostname; query strings were forwarded; `/`, `/user/other`, Actuator health/metrics and Grafana login/health paths
+returned 404. The listener's default action was verified as fixed-response 404 and its security groups allowed only
+the approved client /32. A request from a second, unapproved source IP was not performed; CIDR isolation was checked
+through the actual AWS security-group configuration. HTTP is unencrypted and intended only for dummy demo data.
+
+Pending: complete teardown/leftover audit and a full Bash deployment.
+PowerShell 5.1 live checks passed; Git Bash checks were static/offline only. WSL, native Linux and macOS cloud
+lifecycle tests have not been run.
 
 Record a short YouTube demonstration after live acceptance:
 AWS resources and Terraform outputs; node/pod/Helm readiness; GET/POST; pod-recreation persistence;
 Prometheus targets and Grafana dashboard; then teardown and the leftover audit.
 Hide account/session details as appropriate, all passwords, Secret contents, state and private plans.
 Do not claim Windows/Linux/macOS cloud deployment success until each has actually been exercised.
+
+## Recovering an interrupted apply
+
+Terraform preserves successfully created resources in state when a later operation fails.
+An earlier saved plan is then stale: keep the state, stop any concurrent Terraform operation, and generate a new
+uniquely named plan against the same AWS root and private inputs. Review remaining additions and any unexpected
+changes before applying. Do not delete state, bypass the lock or recreate the whole environment to recover.
+
+The EKS public API is restricted to a specific IPv4 /32. If your ISP/VPN changes that address, update the private
+deployment configuration and generated cluster/platform CIDR inputs, preserving backups, then review/apply a
+cluster plan that updates only the API CIDR. Update the ALB's client CIDR through a reviewed platform plan too
+if ingress is enabled. Never temporarily open either endpoint to 0.0.0.0/0.
