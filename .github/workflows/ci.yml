@@ -157,6 +157,10 @@ jobs:
           helm lint helm/crewmeister-app --set serviceMonitor.enabled=true --strict
           helm template crewmeister-app helm/crewmeister-app --namespace crewmeister \
             --set serviceMonitor.enabled=true > "$RUNNER_TEMP/chart-monitored.yaml"
+          helm lint helm/crewmeister-app --values helm/crewmeister-app/values-aws.yaml --strict
+          helm template crewmeister-app helm/crewmeister-app --namespace crewmeister \
+            --values helm/crewmeister-app/values-aws.yaml \
+            --set-string image.tag=0000000000000000000000000000000000000000 > "$RUNNER_TEMP/chart-aws.yaml"
 
       - name: Validate monitoring configuration
         run: |
@@ -171,17 +175,52 @@ jobs:
             --set mysql.existingPasswordSecret.name=crewmeister-database \
             --set mysql.existingPasswordSecret.key=password > "$RUNNER_TEMP/mysql-exporter.yaml"
 
+      - name: Render AWS platform charts without a cluster
+        run: |
+          helm template crewmeister-mysql mysql \
+            --repo https://groundhog2k.github.io/helm-charts/ --version 3.1.5 \
+            --namespace crewmeister --values terraform/platform/mysql-values.yaml \
+            --values terraform/aws/platform/mysql-values.yaml \
+            --set settings.existingSecret=crewmeister-mysql-root \
+            --set userDatabase.existingSecret=crewmeister-database > "$RUNNER_TEMP/mysql-aws.yaml"
+          helm template crewmeister-monitoring kube-prometheus-stack \
+            --repo https://prometheus-community.github.io/helm-charts --version 92.17.0 \
+            --namespace crewmeister --values monitoring/values.yaml \
+            --values terraform/aws/platform/monitoring-values.yaml \
+            --set grafana.admin.existingSecret=crewmeister-grafana-admin > "$RUNNER_TEMP/monitoring-aws.yaml"
+          helm template aws-load-balancer-controller aws-load-balancer-controller \
+            --repo https://aws.github.io/eks-charts --version 3.6.2 --namespace kube-system \
+            --set clusterName=crewmeister-aws --set region=eu-north-1 --set vpcId=vpc-validation-only \
+            --set replicaCount=1 --set enableShield=false --set enableWaf=false --set enableWafv2=false \
+            > "$RUNNER_TEMP/controller-aws.yaml"
+
       - name: Validate every Terraform stage
         run: |
           terraform fmt -check -recursive terraform
-          for stage in cluster platform; do
+          mkdir -p "$RUNNER_TEMP/terraform-plugin-cache"
+          export TF_PLUGIN_CACHE_DIR="$RUNNER_TEMP/terraform-plugin-cache"
+          for stage in cluster platform aws/bootstrap aws/cluster aws/platform; do
             terraform -chdir="terraform/$stage" init -backend=false -input=false -lockfile=readonly
             terraform -chdir="terraform/$stage" validate
           done
 
+      - name: Parse AWS PowerShell scripts
+        shell: pwsh
+        run: |
+          Get-ChildItem scripts/aws-*.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
+          & ./scripts/tests/aws-guards.ps1
+
+      - name: Test AWS safety guards without credentials
+        run: bash scripts/tests/aws-guards.sh
+
       - name: Check Bash syntax
         run: |
-          for script in scripts/*.sh; do
+          for script in scripts/*.sh scripts/tests/*.sh; do
             bash -n "$script"
           done
 
