@@ -1,22 +1,59 @@
 # Crewmeister DevOps challenge
 
-Run the Java 17 / Spring Boot 3.5.16 API, MySQL, Prometheus and Grafana on a local Kind cluster. Terraform creates Kubernetes and installs the Helm releases. The local path needs no cloud account; an optional AWS EKS deployment demonstrates the same application and monitoring on cloud infrastructure.
+A Java 17 / Spring Boot 3.5.16 user API, deployed on Kubernetes with Terraform and Helm, built and scanned by GitHub Actions, and monitored with Prometheus and Grafana. The same application chart runs on a **local Kind cluster** (free, the main path) and on **AWS EKS** (optional, shown in a video).
 
 [![CI](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/workflows/ci.yml)
+
+[Quick start](#quick-start-local) · [How it works](#how-it-works) · [CI pipeline](#ci-pipeline) · [AWS EKS](#aws-eks-optional) · [Limitations](#known-limitations-and-tested-platforms)
+
+## Overview
+
+| | Local: Kind (main path) | Cloud: AWS EKS (optional) |
+| --- | --- | --- |
+| Who runs it | You, with one script | The author, shown in the video below |
+| Cost | Free, no cloud account | About $6 per day while running |
+| Status | Tested on Windows 11 and WSL2 Ubuntu | Verified on 3 November 2026 from Windows; temporary |
+| Start here | [Quick start](#quick-start-local) | [AWS EKS](#aws-eks-optional) |
+
+```mermaid
+flowchart LR
+    push([git push]) --> ci["GitHub Actions: test, scan, build"]
+    ci -->|"only on main, after all checks pass"| ghcr[("GHCR image tagged with commit SHA")]
+
+    subgraph local ["Local path - Kind, primary"]
+        setup["Setup script"] --> tf1["Terraform: cluster, then platform"]
+        tf1 --> kind["Kind cluster"]
+        kind --> app1["Helm releases: app, MySQL, monitoring"]
+    end
+
+    subgraph aws ["AWS path - EKS, optional"]
+        tf2["Terraform: bootstrap, cluster, platform"] --> eks["EKS cluster"]
+        eks --> app2["Same Helm chart and monitoring"]
+    end
+
+    ghcr --> app1
+    ghcr --> app2
+```
+
+<p align="center">
+  <a href="https://youtu.be/O4EGeSubWZ8"><img src="https://img.youtube.com/vi/O4EGeSubWZ8/hqdefault.jpg" width="360" alt="AWS EKS deployment demo on YouTube"></a>
+  <br>
+  <sub>▶ <a href="https://youtu.be/O4EGeSubWZ8">Watch the AWS EKS deployment on YouTube</a></sub>
+</p>
 
 ## Requirements and where they are
 
 | Assessment requirement | Implementation | Read next |
 | --- | --- | --- |
 | Dockerfile | [Dockerfile](Dockerfile): multi-stage build, pinned base images, non-root runtime | [Image delivery](#image-delivery) |
-| Helm chart | [helm/crewmeister-app](helm/crewmeister-app): Deployment, Service, configuration, probes, ServiceMonitor | [Kubernetes runtime](#kubernetes-runtime) |
+| Helm chart | [helm/crewmeister-app](helm/crewmeister-app): Deployment, Service, configuration, probes, ServiceMonitor | [Helm](#helm) |
 | Terraform interacting with Kubernetes | [terraform/cluster](terraform/cluster) and [terraform/platform](terraform/platform): Kind, namespace, Secrets and Helm releases | [Terraform ownership](#terraform-ownership) |
 | Any cloud provider | [terraform/aws](terraform/aws): AWS EKS extension with separate state | [AWS EKS (optional)](#aws-eks-optional) |
-| Runs locally | [scripts](scripts): PowerShell and Bash setup, verification and teardown | [Quick start](#quick-start) |
+| Runs locally | [scripts](scripts): PowerShell and Bash setup, verification and teardown | [Quick start](#quick-start-local) |
 | GitHub CI | [.github/workflows/ci.yml](.github/workflows/ci.yml): tests, validation, scans, gated image publishing | [CI pipeline](#ci-pipeline) |
 | Monitoring | [monitoring](monitoring): Prometheus, MySQL exporter and provisioned Grafana dashboard | [Open monitoring](#3-open-monitoring) |
 
-## Quick start
+## Quick start (local)
 
 **Tested:** Windows 11 Pro with Docker Desktop and WSL2 Ubuntu 22.04.5 with Docker Desktop integration. Native Linux, native macOS and Apple Silicon are untested. Use the same OS environment and checkout for setup, verification and teardown; Terraform state records native paths.
 
@@ -89,9 +126,11 @@ Use Linux binaries inside WSL and enable Docker Desktop integration for that dis
 
 Setup creates one Kind node and four releases: MySQL, application, monitoring and MySQL exporter. The local scripts apply Terraform automatically for this dedicated environment. They use `.local/crewmeister.kubeconfig` and context `kind-crewmeister`, leaving the default kubeconfig untouched.
 
-![Local Terraform apply showing application workloads and a bound MySQL PVC](docs/screenshots/local-setup-progress.png)
-
-Local setup progress: the MySQL PVC is bound, while Prometheus is still initializing; verification establishes final readiness.
+<p align="center">
+  <a href="docs/screenshots/local-setup-progress.png"><img src="docs/screenshots/local-setup-progress.png" width="560" alt="Local Terraform apply showing application workloads and a bound MySQL PVC"></a>
+  <br>
+  <sub>Setup in progress: the MySQL volume is bound while Prometheus is still starting. Click to enlarge.</sub>
+</p>
 
 Verification checks nodes, workloads, storage, seeded GET, POST and persisted readback, health, metrics, Prometheus targets and the authenticated Grafana dashboard. It removes its test row and temporary port-forwards. It does not replace the separately recorded MySQL pod-recreation persistence test in [validation evidence](docs/validation.md).
 
@@ -159,21 +198,19 @@ Transfer the variable through your local clipboard utility, then `unset grafana_
 
 </details>
 
-In Grafana, open **Dashboards → Crewmeister → Crewmeister application**. The eight panels cover availability, request rate, latency, HTTP errors, JVM memory, restarts and MySQL health/connections. Run API requests to generate traffic; rate panels need at least two scrapes.
-
-![Provisioned Grafana dashboard showing application availability, request metrics and JVM memory](docs/screenshots/grafana-dashboard.png)
-
-Grafana snapshot with live application and JVM data from the recorded local deployment.
+In Grafana, open **Dashboards → Crewmeister → Crewmeister application**. The eight panels cover availability, request rate, latency, HTTP errors, JVM memory, restarts and MySQL health and connections. Run API requests to generate traffic; rate panels need at least two scrapes.
 
 In Prometheus, run `up{namespace="crewmeister",service="crewmeister-app"}` and `mysql_up{namespace="crewmeister",service="crewmeister-mysql-exporter"}`. Each should return `1`.
 
-![Prometheus application scrape query returning one](docs/screenshots/prometheus-application-up.png)
+<table>
+  <tr>
+    <td align="center" valign="top"><a href="docs/screenshots/grafana-dashboard.png"><img src="docs/screenshots/grafana-dashboard.png" width="260" alt="Provisioned Grafana dashboard with live application and JVM data"></a><br><sub>Grafana dashboard with live data</sub></td>
+    <td align="center" valign="top"><a href="docs/screenshots/prometheus-application-up.png"><img src="docs/screenshots/prometheus-application-up.png" width="260" alt="Prometheus query showing the application target up"></a><br><sub>Prometheus: application UP</sub></td>
+    <td align="center" valign="top"><a href="docs/screenshots/prometheus-mysql-up.png"><img src="docs/screenshots/prometheus-mysql-up.png" width="260" alt="Prometheus query showing MySQL up"></a><br><sub>Prometheus: MySQL UP</sub></td>
+  </tr>
+</table>
 
-Application scrape snapshot: Prometheus reports the application target UP.
-
-![Prometheus MySQL exporter query returning one](docs/screenshots/prometheus-mysql-up.png)
-
-Database scrape snapshot: the exporter reports MySQL UP.
+<sub>Click an image to enlarge.</sub>
 
 ### 4. Tear down the local environment
 
@@ -189,80 +226,68 @@ bash scripts/down.sh
 
 Teardown destroys the platform before the Kind cluster and checks ownership and cluster identity. **This deletes the demonstration database.** Keep the checkout, state and dedicated kubeconfig until teardown finishes. Do not run lifecycle commands concurrently or delete state to work around a failure.
 
-## Architecture
-
-### Overview
-
-```mermaid
-flowchart LR
-    scripts[Local setup script] --> cluster[Terraform cluster stage]
-    cluster --> kind[Kind cluster]
-    kind --> platform[Terraform platform stage]
-    platform --> mysql[MySQL Helm release]
-    platform --> app[Application Helm release]
-    platform --> monitoring[Monitoring Helm release]
-    platform --> exporter[MySQL exporter Helm release]
-    mysql --> pods[Kubernetes pods]
-    app --> pods
-    monitoring --> pods
-    exporter --> pods
-```
-
-The upstream charts are MySQL **3.1.5**, kube-prometheus-stack **92.17.0** and prometheus-mysql-exporter **2.16.0**. MySQL uses the official 8.4 image pinned by digest. The application chart is maintained in this repository.
+## How it works
 
 ### Terraform ownership
 
-Local stages own separate resources and state. The platform stage starts after cluster creation and image selection.
+Local setup runs two Terraform stages in order. The cluster stage creates Kind and writes a dedicated kubeconfig. The platform stage reads that kubeconfig and installs everything on top.
 
 ```mermaid
-flowchart LR
-    cluster[terraform/cluster] --> kind[Kind node and API]
-    cluster --> kube[.local/crewmeister.kubeconfig]
-    cluster --> cs[terraform/cluster/terraform.tfstate]
-    kube --> platform[terraform/platform]
-    platform --> resources[Namespace, Secrets and four Helm releases]
-    platform --> ps[terraform/platform/terraform.tfstate]
+sequenceDiagram
+    participant S as Setup script
+    participant C as terraform/cluster
+    participant K as Kind cluster
+    participant P as terraform/platform
+    participant H as Helm releases
+    S->>C: init and apply
+    C->>K: create node and API
+    C-->>S: write .local/crewmeister.kubeconfig
+    Note over S: choose image, GHCR pull or local build
+    S->>P: init and apply with kubeconfig and image tag
+    P->>H: namespace, Secrets, then four Helm releases
+    H->>K: pods start and become ready
 ```
 
-AWS adds a bootstrap root and uses independent state keys; it never reuses the Kind states.
-
-```mermaid
-flowchart LR
-    bootstrap[terraform/aws/bootstrap] --> bucket[Protected S3 state bucket]
-    bootstrap --> bs[.local/aws/bootstrap.tfstate]
-    bucket --> cluster[terraform/aws/cluster]
-    cluster --> infrastructure[VPC, EKS, node and identity]
-    cluster --> cs[S3 cluster state]
-    cs --> platform[terraform/aws/platform]
-    platform --> releases[Storage, controller and workloads]
-    platform --> ps[S3 platform state]
-    infrastructure --> connect[Connect script]
-    connect --> kube[.local/aws dedicated kubeconfig]
-```
+Each stage keeps its own state: `terraform/cluster/terraform.tfstate` and `terraform/platform/terraform.tfstate`.
 
 Terraform generates database and Grafana passwords at apply time. **State contains passwords in plaintext**, even when outputs are sensitive. State, plans, private inputs and kubeconfigs are ignored by Git and must stay private; provider lock files are committed.
+
+### Helm
+
+Terraform installs four Helm releases. The application chart is maintained in this repository; the others are pinned upstream charts. MySQL uses the official 8.4 image pinned by digest.
+
+```mermaid
+flowchart LR
+    tf["Terraform helm_release"] --> r1["mysql release"]
+    tf --> r2["application release"]
+    tf --> r3["monitoring release"]
+    tf --> r4["mysql exporter release"]
+    r1 --> o1["StatefulSet, Service, PVC"]
+    r2 --> o2["Deployment, Service, probes, ServiceMonitor"]
+    r3 --> o3["Prometheus, Grafana, operator"]
+    r4 --> o4["Exporter Deployment, ServiceMonitor"]
+```
+
+Upstream chart versions: MySQL **3.1.5**, kube-prometheus-stack **92.17.0**, prometheus-mysql-exporter **2.16.0**.
 
 ### Kubernetes runtime
 
 ```mermaid
 flowchart LR
-    browser[Reviewer on localhost] -->|port-forward only| services[API, Grafana and Prometheus ClusterIP Services]
-    subgraph project[crewmeister namespace]
-        services --> app[Application Deployment]
-        app --> db[MySQL ClusterIP Service]
-        db --> mysql[MySQL StatefulSet]
-        mysql --> pvc[2 GiB PVC]
-        services --> grafana[Grafana]
-        grafana --> prom[Prometheus]
-        sm[ServiceMonitors] --> prom
-        prom -->|scrape| app
-        prom -->|scrape| exporter[MySQL exporter]
-        exporter --> db
-        services --> prom
+    subgraph ns ["namespace crewmeister"]
+        app["Spring Boot app"] -->|"JDBC 3306"| mysql[("MySQL with 2 GiB PVC")]
+        exporter["MySQL exporter"] --> mysql
+        prom["Prometheus"] -->|"scrapes metrics"| app
+        prom -->|"scrapes metrics"| exporter
+        grafana["Grafana dashboard"] -->|"queries"| prom
     end
+
+    you(["Reviewer on localhost"]) -. "port-forward" .-> app
+    you -. "port-forward" .-> grafana
+    you -. "port-forward" .-> prom
 ```
 
-No local Service is publicly exposed. MySQL stays internal. Its PVC survives pod replacement; namespace or cluster destruction removes the data. Prometheus storage is ephemeral with six-hour local retention. Shared values disable unused monitoring components to reduce resource use.
+Nothing is exposed publicly in the local setup: every Service is ClusterIP and you reach it through `kubectl port-forward`. MySQL stays internal. Its PVC survives pod replacement; namespace or cluster destruction removes the data. Prometheus storage is ephemeral with six-hour local retention, and shared values disable unused monitoring components to save resources.
 
 The application runs as UID 10001, drops all capabilities, disallows privilege escalation and has a read-only root filesystem with writable `/tmp`. It receives no service-account token. Startup, liveness and database-aware readiness probes control rollout and traffic.
 
@@ -270,22 +295,18 @@ The application runs as UID 10001, drops all capabilities, disallows privilege e
 
 ```mermaid
 flowchart LR
-    setup[Setup] --> check{Published checkout SHA available and build inputs clean?}
-    check -->|Yes| ghcr[Public GHCR image]
-    ghcr --> pull[Kubernetes direct pull]
-    check -->|No| build[Local Docker build]
-    build --> load[kind load]
-    pull --> app[Application Deployment]
-    load --> app
+    setup["Setup script"] --> check{"Image for this commit in GHCR, and no local changes?"}
+    check -->|"yes"| ghcr["Public GHCR image"]
+    ghcr --> pull["Kubernetes pulls it, IfNotPresent"]
+    check -->|"no"| build["Local Docker build"]
+    build --> load["kind load, pull policy Never"]
+    pull --> deploy["Application Deployment"]
+    load --> deploy
 ```
 
-The default image is `ghcr.io/ouemnaa/crewmeister-devops-challenge:<full-commit-SHA>`. Registry images use `IfNotPresent`; locally built, content-tagged images use `Never`. Only local builds pass through Kind's image import. Missing published tags fall back to a local build in default `auto` mode.
+The default image is `ghcr.io/ouemnaa/crewmeister-devops-challenge:<full-commit-SHA>`. Registry images use `IfNotPresent`; locally built, content-tagged images use `Never`. Only local builds pass through Kind's image import. A missing published tag falls back to a local build in the default `auto` mode.
 
-`CREWMEISTER_IMAGE_MODE=local` forces a build; `registry` requires a published image without fallback. `CREWMEISTER_IMAGE_TAG` and `CREWMEISTER_IMAGE_REPOSITORY` override selection. No deployment path uses `latest`.
-
-## Screenshots
-
-Screenshots sit beside the setup, monitoring, CI and AWS steps they illustrate. Filenames use lowercase kebab-case. AWS account IDs are masked; other image pixels are unchanged, including browser chrome and resource addresses. No screenshot establishes the current status of a running environment.
+`CREWMEISTER_IMAGE_MODE=local` forces a build; `registry` requires a published image with no fallback. `CREWMEISTER_IMAGE_TAG` and `CREWMEISTER_IMAGE_REPOSITORY` override selection. No deployment path uses `latest`.
 
 ## CI pipeline
 
@@ -293,92 +314,106 @@ Screenshots sit beside the setup, monitoring, CI and AWS steps they illustrate. 
 
 ```mermaid
 flowchart LR
-    trigger[PR, push to main or manual dispatch] --> test[Build and test]
-    trigger --> infra[Validate infrastructure]
-    trigger --> secrets[Scan Git history for secrets]
-    test --> image[Build and scan image]
+    t([PR, push to main, or manual run]) --> test["test: build and 6 integration tests"]
+    t --> infra["infrastructure: Helm, Terraform, script checks"]
+    t --> secrets["secrets: Gitleaks over full history"]
+    test --> image["image: build, Trivy scan, SBOM"]
     infra --> image
     secrets --> image
-    image --> gate{Push to main and all earlier jobs passed?}
-    gate -->|Yes| publish[Publish the scanned image]
-    gate -->|No| skip[Publishing skipped]
-    publish --> ghcr[GHCR full commit SHA tag]
+    image --> gate{"Push to main?"}
+    gate -->|"yes"| publish["publish: push to GHCR with SHA tag"]
+    gate -->|"no"| skip(["No publishing on PRs or manual runs"])
 ```
 
 | Job | What it checks or produces | When it runs |
 | --- | --- | --- |
-| `test` — Build and test | Java 17 build, six integration tests against disposable MySQL, test reports; optional SonarCloud step | Every trigger |
-| `infrastructure` — Validate infrastructure | Helm lint/render for local and AWS values, monitoring/dashboard checks, all five Terraform roots, PowerShell parsing and offline AWS guard tests, Bash syntax | Every trigger |
-| `secrets` — Scan Git history for secrets | Full-history Gitleaks scan; detected secrets fail the job, output is redacted | Every trigger |
-| `image` — Build and scan image | One Docker build, Trivy OS/Java reports and CycloneDX SBOM; scanner errors fail the job | After the first three jobs pass |
-| `publish` — Publish image | Publishes the already scanned image with the full commit SHA and checks anonymous GHCR access | Push to `main` only, after all earlier jobs pass |
+| `test` (Build and test) | Java 17 build, six integration tests against disposable MySQL, test reports; optional SonarCloud step | Every trigger |
+| `infrastructure` (Validate infrastructure) | Helm lint and render for local and AWS values, monitoring and dashboard checks, all five Terraform roots, PowerShell parsing and offline AWS guard tests, Bash syntax | Every trigger |
+| `secrets` (Scan Git history for secrets) | Full-history Gitleaks scan; detected secrets fail the job, output is redacted | Every trigger |
+| `image` (Build and scan image) | One Docker build, Trivy OS and Java reports, CycloneDX SBOM; scanner errors fail the job | After the first three jobs pass |
+| `publish` (Publish image) | Publishes the already scanned image with the full commit SHA and checks anonymous GHCR access | Push to `main` only, after all earlier jobs pass |
 
-Pull requests and manual runs cannot publish. Only `publish` has package-write permission. CI publishes a container image; it does not commit code to the repository or deploy Kubernetes/AWS. Actions and scanners are pinned to immutable revisions; Dependabot checks Actions, Docker and Maven weekly.
+Pull requests and manual runs cannot publish. Only `publish` has package-write permission. CI publishes a container image; it does not commit code or deploy Kubernetes or AWS. Actions and scanners are pinned to immutable revisions; Dependabot checks Actions, Docker and Maven weekly.
 
-SonarCloud is an optional **step inside `test`**, enabled only on pushes to `main` with the required repository variables and token. Missing configuration skips it. The recorded pre-submission run skipped this step; the separate screenshot below shows a SonarCloud analysis snapshot, not proof that this CI step ran.
+SonarCloud analyses the repository through its own GitHub integration, which needs no token and is separate from the workflow. The workflow also has an optional Sonar step inside `test`; it runs only on pushes to `main` when the required repository variables and token exist. The recorded pre-submission run skipped that step.
 
-![SonarCloud overview showing a passed quality gate and one low-severity security issue](docs/screenshots/sonarcloud-analysis.png)
-
-SonarCloud snapshot: the gate passed, but one low-severity security issue remains visible; its rule and resolution are not recorded here.
+<p align="center">
+  <a href="docs/screenshots/sonarcloud-analysis.png"><img src="docs/screenshots/sonarcloud-analysis.png" width="480" alt="SonarCloud overview with a passed quality gate and one low-severity security issue"></a>
+  <br>
+  <sub>SonarCloud: quality gate passed, one low-severity finding left open. Click to enlarge.</sub>
+</p>
 
 ## AWS EKS (optional)
 
-**Reviewers are not expected to deploy AWS.** Use the local quick start to run the assessment without cloud charges. AWS demonstrates a separate deployment using the published application image and shared monitoring configuration.
+**Reviewers are not expected to deploy AWS.** The local quick start runs the whole assessment without cloud charges. AWS shows the same application and monitoring on a managed cluster, using the published image and the shared Helm chart.
 
-The AWS roots create a protected state bucket, a dedicated VPC with two public subnets, EKS, one On-Demand `m7i-flex.large` worker, Pod Identity associations, encrypted gp3 storage and the Helm workloads. Public application ingress adds an ALB. There is no NAT gateway. This is a single-node demonstration, with interruptions during replacement or updates.
+<p align="center">
+  <a href="https://youtu.be/O4EGeSubWZ8"><img src="https://img.youtube.com/vi/O4EGeSubWZ8/hqdefault.jpg" width="320" alt="AWS EKS deployment demo on YouTube"></a>
+  <br>
+  <sub>▶ <a href="https://youtu.be/O4EGeSubWZ8">Watch the AWS EKS deployment</a></sub>
+</p>
 
-**Cost:** the guide records about **$0.25/hour or $6/day** with ingress, before credits, taxes, transfer and extra storage/requests. This is a historical estimate, not a spending cap. Idle pods do not stop infrastructure charges.
-
-**Lifecycle status:** live Windows acceptance is recorded on **3 November 2026**. The demo is intended to remain available for about two weeks; availability is temporary. No destruction date or completed leftover audit is recorded in the repository, so this README does not claim teardown has passed.
-
-[![Demo](https://img.youtube.com/vi/O4EGeSubWZ8/maxresdefault.jpg)](https://youtu.be/O4EGeSubWZ8)
+The AWS Terraform roots create a protected state bucket, a dedicated VPC with two public subnets, EKS, one On-Demand `m7i-flex.large` worker, Pod Identity associations, encrypted gp3 storage and the Helm workloads. Public API ingress adds an ALB. There is no NAT gateway. It is a single-node demonstration, so a node replacement or update interrupts every workload.
 
 ```mermaid
 flowchart LR
-    client[API client] --> alb[ALB exact /user route]
-    subgraph vpc[Dedicated VPC with two public subnets]
-        alb --> app[Application pod]
-        eks[EKS control plane] --> node[One EKS worker node]
-        node --> app
-        app --> mysql[MySQL pod]
-        mysql --> ebs[Encrypted EBS volume]
+    client(["API client"]) --> alb["ALB, only the /user path"]
+
+    subgraph vpc ["Dedicated VPC, two public subnets"]
+        alb --> app["Application pod"]
+        app --> mysql["MySQL pod"]
+        mysql --> ebs[("Encrypted EBS volume")]
+        node["One EKS worker node"]
     end
-    terraform[AWS Terraform roots] --> eks
-    terraform --> s3[Protected S3 state]
+
+    eks["EKS control plane, managed by AWS"] --> node
+    tf["Terraform: bootstrap, cluster, platform"] --> eks
+    tf --> s3[("S3 state bucket")]
+    ghcr[("GHCR image")] --> app
 ```
 
-**Check EKS workload status:** the recorded console view shows running Deployments, DaemonSets and StatefulSets.
+AWS uses three separate Terraform roots and never reuses the Kind states. Bootstrap keeps its own local state in `.local/aws/`; the cluster and platform roots keep theirs in the protected S3 bucket with native locking.
 
-![AWS EKS workload summary showing running resources with account IDs masked](docs/screenshots/aws/aws-workload-status.png)
+```mermaid
+flowchart LR
+    boot["terraform/aws/bootstrap"] -->|"creates"| bucket[("Protected S3 bucket")]
+    bucket --> cstate["cluster state"]
+    bucket --> pstate["platform state"]
+    cluster["terraform/aws/cluster"] --> infra["VPC, EKS, node, identity"]
+    cluster --> cstate
+    platform["terraform/aws/platform"] --> work["Storage, ALB controller, workloads"]
+    platform --> pstate
+    cstate -->|"read by"| platform
+```
 
-AWS workload summary from the recorded deployment; browser tabs and AWS console resource URLs remain visible.
+**Cost:** about **$0.25 per hour, or $6 per day**, with ingress, before credits, taxes, transfer and extra storage. This is a historical estimate, not a spending cap. Idle pods do not stop infrastructure charges.
 
-**Check the application and monitoring pods:** the recorded pod list includes the API, database, exporter and Grafana.
+**Status:** deployed and verified on **3 November 2026** from Windows PowerShell. The cluster is temporary because of its cost and will be destroyed after the review period; this video and the screenshots stay as evidence. The ordered teardown steps are in the AWS guide. A completed teardown and leftover audit are not yet recorded.
 
-![AWS EKS pod list showing application and monitoring pods running with account IDs masked](docs/screenshots/aws/aws-running-pods.png)
+<table>
+  <tr>
+    <td align="center" valign="top"><a href="docs/screenshots/aws/aws-workload-status.png"><img src="docs/screenshots/aws/aws-workload-status.png" width="260" alt="EKS workload summary with running resources"></a><br><sub>EKS workloads running</sub></td>
+    <td align="center" valign="top"><a href="docs/screenshots/aws/aws-running-pods.png"><img src="docs/screenshots/aws/aws-running-pods.png" width="260" alt="EKS pod list with the application and monitoring pods running"></a><br><sub>Application and monitoring pods</sub></td>
+    <td align="center" valign="top"><a href="docs/screenshots/aws/aws-load-balancer.png"><img src="docs/screenshots/aws/aws-load-balancer.png" width="260" alt="ALB listener with a default 404 response"></a><br><sub>ALB: default 404, only /user routed</sub></td>
+  </tr>
+</table>
 
-AWS pod list from the recorded deployment; browser tabs and console resource URLs remain visible.
+<sub>Click an image to enlarge.</sub>
 
-**Check ingress:** the ALB listener uses a default fixed 404 response; the application rule permits exactly `/user`, including query strings.
+**Access:** the EKS management endpoint is restricted to the administrator's IP. The API ingress accepts requests from any IPv4 address while the demo runs, and routes exactly `/user`, including query strings. Grafana and Prometheus are not exposed and use localhost port-forwarding. Public HTTP `/user` has no authentication and is meant only for temporary dummy data; health, metrics and monitoring paths return 404 through the ALB.
 
-![AWS load balancer listener with a default 404 response and account IDs masked](docs/screenshots/aws/aws-load-balancer.png)
-
-ALB evidence from the recorded deployment; browser tabs, resource identifiers and the load-balancer hostname remain visible in the original capture.
-
-The **EKS management endpoint remains restricted to the administrator's IP**. Application ingress initially used an IP restriction, then the owner enabled worldwide IPv4 access explicitly. Grafana and Prometheus remain private and use localhost port-forwarding. Public HTTP `/user` has no authentication and is intended only for temporary dummy data; management and monitoring paths return 404 through the ALB.
-
-For another account, use a fresh checkout, your own temporary-credential profile, account confirmation, operator role, private configuration and unique backend bucket. Review costs, eligibility and each Terraform plan. Follow [the AWS deployment guide](docs/aws-deployment.md) for setup, verification, monitoring and ordered teardown; do not reuse someone else's private inputs or state. Full deployment on another account has not been validated.
+To run it in your own account, use a fresh checkout, your own temporary-credential profile, an account check, an operator role, private configuration and a unique backend bucket. Review costs, eligibility and every Terraform plan first. The [AWS deployment guide](docs/aws-deployment.md) covers setup, verification, monitoring and ordered teardown. Do not reuse someone else's private inputs or state. A full deployment from another account has not been validated.
 
 ## Design decisions
 
-- Two local Terraform stages create the cluster before configuring Helm, so Kubernetes exists when the platform providers connect.
-- Full commit-SHA image tags identify the source revision, while a local-build fallback keeps unpublished checkouts runnable.
-- CI publishes the scanned image without deploying it, so repository activity does not trigger cloud changes or costs.
-- Kind provides the primary local platform because reviewers can run Kubernetes without a cloud account.
-- AWS workloads use Pod Identity because the tested account blocked IAM OIDC-provider creation and Pod Identity supports separate workload roles.
-- AWS uses separate, protected S3 state with native locking so cloud resources do not share local Kind state.
-- Trivy findings remain report-only to expose inherited application vulnerabilities without hiding them; scanner errors still fail CI.
-- SonarCloud is an optional step in the build/test job because analysis needs repository configuration and a token that local reviewers do not need.
+- **Two local Terraform stages:** the cluster exists before the Helm providers connect to it.
+- **Full commit-SHA image tags:** each image maps to a source revision, and a local-build fallback keeps unpublished checkouts runnable.
+- **CI publishes but does not deploy:** repository activity never triggers cloud changes or costs.
+- **Kind for the local path:** reviewers can run Kubernetes without a cloud account.
+- **Pod Identity on AWS:** the tested account blocked creation of an IAM OIDC provider, and Pod Identity gives each workload its own role without one.
+- **Separate, protected S3 state on AWS:** cloud resources never share state with the local Kind setup.
+- **Trivy is report-only:** inherited application vulnerabilities stay visible instead of being hidden, and scanner errors still fail CI.
+- **SonarCloud through its GitHub integration:** analysis needs no token, so local reviewers need no extra setup.
 
 ## Known limitations and tested platforms
 
@@ -389,15 +424,15 @@ The recorded **3 November 2026** image scan found **2 CRITICAL**, 0 HIGH, 28 MED
 | CVE-2026-47884 | Open; no upgrade or suppression |
 | CVE-2026-47890 | Open; no upgrade or suppression |
 
-See [critical-finding details and upstream severity differences](docs/validation.md#critical-findings-unchanged). A major Spring Boot upgrade was not performed. Read current CI artifacts for newer vulnerability data; a green CI run does not mean the image has no vulnerabilities.
+See [critical-finding details and upstream severity differences](docs/validation.md#critical-findings-unchanged). A major Spring Boot upgrade was not performed. A green CI run does not mean the image has no vulnerabilities; read the current CI artifacts for newer data.
 
-- **Published architecture:** `linux/amd64` only; no published ARM64 image or verified Apple Silicon deployment. CI publishes SHA tags, not release/version tags.
-- **SonarCloud:** the supplied snapshot shows one low-severity security issue; its rule, fix status and current live analysis are unverified.
-- **Network isolation:** no NetworkPolicies. ClusterIP Services do not provide pod-to-pod access restrictions.
-- **Availability and data:** one local node or one AWS worker, no high availability or production backup workflow; MySQL data survives pod recreation but teardown deletes it. Monitoring storage is ephemeral.
-- **Public API:** optional AWS HTTP exposure has no application authentication or TLS unless an existing certificate/domain is configured.
-- **Credentials:** generated at deployment, stored in Kubernetes Secrets and plaintext Terraform state; local private files require protection.
-- **Standalone chart:** its `local` image default is a development placeholder; setup supplies the actual image and database settings.
+- **Published architecture:** `linux/amd64` only. There is no published ARM64 image and no verified Apple Silicon deployment. CI publishes SHA tags, not release tags.
+- **SonarCloud:** one low-severity "debug feature" finding in `UserController` is left open.
+- **Network isolation:** no NetworkPolicies. ClusterIP Services do not restrict pod-to-pod access.
+- **Availability and data:** one local node or one AWS worker, no high availability and no production backup workflow. MySQL data survives pod recreation but teardown deletes it. Monitoring storage is ephemeral.
+- **Public API:** the optional AWS HTTP exposure has no application authentication and no TLS unless an existing certificate and domain are configured.
+- **Credentials:** generated at deployment, stored in Kubernetes Secrets and plaintext Terraform state; private local files need protection.
+- **Standalone chart:** its `local` image default is a development placeholder; setup supplies the real image and database settings.
 
 | Platform or lifecycle | Recorded coverage |
 | --- | --- |
@@ -407,8 +442,8 @@ See [critical-finding details and upstream severity differences](docs/validation
 | Native Linux with standalone Docker Engine | **Untested** |
 | Native macOS | **Untested** |
 | Apple Silicon / ARM64 deployment | **Untested** |
-| AWS lifecycle using Bash | **Untested live**; syntax/offline guard checks only |
-| Fresh-account / fresh-clone full AWS lifecycle | **Untested**; recorded live work recovered an existing deployment |
+| AWS lifecycle using Bash | **Untested live**; syntax and offline guard checks only |
+| Fresh-account, fresh-clone full AWS lifecycle | **Untested**; recorded live work recovered an existing deployment |
 | Independent second-network AWS HTTP check | **Untested**; security-group configuration was inspected |
 | OS-specific Bash clipboard integration | **Untested** |
 | Complete AWS teardown and leftover audit | **Not recorded as complete** |
@@ -423,9 +458,9 @@ terraform/platform/           Local namespace, Secrets and releases
 terraform/aws/                Separate bootstrap, cluster and platform roots
 monitoring/                   Shared values, exporter and Grafana dashboard
 scripts/                      PowerShell/Bash lifecycle and verification
-.github/workflows/ci.yml       CI checks and gated GHCR publishing
+.github/workflows/ci.yml      CI checks and gated GHCR publishing
 src/                          Application, migrations and integration tests
 docs/                         Assessment, validation, AWS guide and screenshots
 ```
 
-Read the [original assessment](docs/assessment.md), [validation evidence](docs/validation.md) and [AWS deployment guide](docs/aws-deployment.md) for scope, executed checks and detailed cloud operations.
+More detail: the [original assessment](docs/assessment.md), the [validation evidence](docs/validation.md) and the [AWS deployment guide](docs/aws-deployment.md).
