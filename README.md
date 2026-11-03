@@ -6,6 +6,8 @@ The [original assessment](docs/assessment.md) is preserved separately. See [vali
 
 **Tested on:** Windows 11 Pro with Docker Desktop (Engine 28.0.4), and WSL2 Ubuntu 22.04.5 using Docker Desktop integration. Native macOS and standalone Linux Docker Engine are untested.
 
+The 2026-11-03 pre-submission audit repeated the complete fresh-clone lifecycle on Windows. WSL coverage is from the earlier validation; a new WSL lifecycle was not run in this audit at the owner's request.
+
 ## Quick start
 
 Install the prerequisites below and start Docker with Linux containers.
@@ -23,7 +25,7 @@ cd crewmeister-devops-challenge
 
 If execution policy blocks scripts, use a separate process, for example `powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1`. No machine-wide policy change is needed.
 
-**Linux, macOS or WSL with Bash:**
+**WSL2 Ubuntu with Bash (native macOS and standalone Linux Docker Engine are untested):**
 
 ```bash
 git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
@@ -48,11 +50,21 @@ Put these tools on `PATH`:
 | kubectl | **1.36.4** | [kubectl](https://kubernetes.io/docs/tasks/tools/); 1.35-1.37 clients also accepted |
 | Helm | **4.3.1** | [Helm release](https://github.com/helm/helm/releases/tag/v4.3.1) |
 | Git | Git 2.x | [Git](https://git-scm.com/downloads) |
-| Bash and curl | Bash 3.2+, curl 7+ | Required for Bash scripts; WSL needs Docker Desktop integration |
+| Bash and curl | Bash 5.1/5.2 tested; curl 7.81+ | Required for Bash scripts; WSL needs Docker Desktop integration |
 
 Choose binaries matching your OS/CPU and verify publisher checksums. Provider locks cover Windows amd64, Linux amd64/arm64 and macOS amd64/arm64. Java 17 is needed only for direct tests: Docker includes the JDK and uses the checked-in Maven wrapper.
 
 Allocate at least 4 CPUs and 6 GiB RAM to Docker; 8 GiB is more comfortable during builds. GitHub, Maven Central, chart repositories and container registries must be reachable. The Kubernetes API uses a random localhost port. Prefer cgroup v2; on older cgroup-v1 Docker hosts, setup enables Kubernetes' temporary `failCgroupV1: false` compatibility setting without changing the host.
+
+| Service | Local access used below | Kubernetes port |
+| --- | --- | --- |
+| Application | `http://127.0.0.1:18080` | 8080 |
+| Grafana | `http://127.0.0.1:13000` | Service 80, container 3000 |
+| Prometheus | `http://127.0.0.1:19090` | 9090 |
+| MySQL | Internal; separate disposable test database may use 13306 | 3306 |
+| MySQL exporter | Internal only | 9104 |
+
+Keep each port-forward command running in its own terminal. If a local port is occupied, change the number before the colon and use that number in the URL. Using `:8080`, `:80` or `:9090` instead asks kubectl to select a free local port.
 
 ## Architecture
 
@@ -105,19 +117,19 @@ Set mode `registry` to require a published image without fallback. `CREWMEISTER_
 Keep this running in a terminal:
 
 ```text
-kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-app :8080
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-app 18080:8080
 ```
 
-Replace `PORT` with the localhost port printed by kubectl.
+Open `http://127.0.0.1:18080/user?id=1`, or use the commands below.
 
 ```powershell
-Invoke-RestMethod 'http://127.0.0.1:PORT/user?id=1'
-Invoke-RestMethod 'http://127.0.0.1:PORT/user' -Method Post -ContentType 'application/json' -Body '{"name":"Reviewer"}'
+Invoke-RestMethod 'http://127.0.0.1:18080/user?id=1'
+Invoke-RestMethod 'http://127.0.0.1:18080/user' -Method Post -ContentType 'application/json' -Body '{"name":"Reviewer"}'
 ```
 
 ```bash
-curl --fail 'http://127.0.0.1:PORT/user?id=1'
-curl --fail -H 'Content-Type: application/json' --data '{"name":"Reviewer"}' 'http://127.0.0.1:PORT/user'
+curl --fail 'http://127.0.0.1:18080/user?id=1'
+curl --fail -H 'Content-Type: application/json' --data '{"name":"Reviewer"}' 'http://127.0.0.1:18080/user'
 ```
 
 GET returns `Greetings from Crewmeister, Alice!`. POST persists the name and returns its greeting, preserving the original contract. Verification queries the generated ID through MySQL, retrieves that user and removes its unique test record. Existing records are preserved.
@@ -126,24 +138,28 @@ Health paths are `/actuator/health`, `/actuator/health/readiness` and `/actuator
 
 ## Monitoring access
 
-Run either command in its own terminal and open the localhost port it prints:
+Run either command in its own terminal. Open Grafana at `http://127.0.0.1:13000` and Prometheus at `http://127.0.0.1:19090`:
 
 ```text
-kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-grafana :80
-kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-monitoring-prometheus :9090
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-grafana 13000:80
+kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address 127.0.0.1 service/crewmeister-monitoring-prometheus 19090:9090
 ```
 
-Grafana username is `admin`. Retrieve its generated password locally:
+Grafana username is `admin`; its password is generated, not the default `admin`. Copy it to your local clipboard without printing it, then paste it into the login form:
 
 ```powershell
 $secret = kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get secret crewmeister-grafana-admin -o json | ConvertFrom-Json
-[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($secret.data.'admin-password'))
+$grafanaPassword = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($secret.data.'admin-password'))
+Set-Clipboard -Value $grafanaPassword
+Remove-Variable secret, grafanaPassword
 ```
 
 ```bash
-kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get secret crewmeister-grafana-admin -o go-template --template='{{index .data "admin-password" | base64decode}}'
-printf '\n'
+# Bash: retrieve into a variable without printing it.
+grafana_password="$(kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get secret crewmeister-grafana-admin -o go-template --template='{{index .data "admin-password" | base64decode}}')"
 ```
+
+The Bash variable holds the generated password; use your local clipboard utility to paste it into Grafana, then `unset grafana_password`. Keep credentials out of screenshots.
 
 Open **Dashboards > Crewmeister > Crewmeister application**, or `/d/crewmeister`. Eight panels show target availability, request rate, mean latency, HTTP 5xx rate, JVM memory, pod restarts, MySQL availability and connections. Generate API traffic or run verification. Rate panels need two scrapes; discovery after an update can take several minutes.
 
@@ -174,33 +190,54 @@ Terraform state contains generated passwords in plaintext. State, backups, plans
 
 Actions and scanners are pinned to immutable revisions. Dependabot checks Actions, Docker and Maven weekly; Java and Spring Boot major upgrades require a compatibility decision.
 
-Trivy findings are **report-only**; scanner failures fail CI. The 2026-11-02 local scan after dependency updates found 2 CRITICAL, 0 HIGH, 28 MEDIUM and 4 LOW findings. Critical findings `CVE-2026-47884` and `CVE-2026-47890` affect Spring MVC 6.2.19; Trivy lists Spring 7.0.9 as the fix, requiring assessment of a Spring Boot major upgrade. No ignore list hides findings. Inspect current CI artifacts because vulnerability data changes. This local assessment is not a production security baseline.
+Trivy findings are **report-only**; scanner failures fail CI. See the findings and their status below. No ignore list hides findings; inspect current CI artifacts because vulnerability data changes.
 
 Optional SonarCloud analysis runs on trusted pushes to `main` when repository variables `SONAR_PROJECT_KEY`, `SONAR_ORGANIZATION` and secret `SONAR_TOKEN` are configured. Missing tokens skip analysis. Fork pull requests never receive the token; local setup needs no Sonar account.
 
-The existing [hosted run](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/runs/41517004402) passed application tests, infrastructure validation, scanning and public GHCR publishing. New local commits must be pushed before their hosted checks run. A fork's new GHCR package may need **Package settings > Change visibility > Public**; anonymous verification fails clearly otherwise.
+The [pre-submission push run](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/runs/41637342104) passed all five jobs, including public GHCR publishing. The [test PR run](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/runs/41636652144) passed checks and skipped publishing. SonarCloud was skipped because its configuration was absent; it remains optional and unchanged. A new GHCR package may need **Package settings > Change visibility > Public**; anonymous verification fails clearly otherwise.
+
+## Known limitations
+
+- **Unresolved vulnerability findings:** the 2026-11-03 scan of the published application image reported 2 CRITICAL, 0 HIGH, 28 MEDIUM and 4 LOW findings. Both critical findings are in `org.springframework:spring-webmvc` 6.2.19:
+
+  | Finding | Installed | Trivy fixed version | Status |
+  | --- | --- | --- | --- |
+  | [CVE-2026-47884](https://spring.io/security/cve-2026-47884/) | 6.2.19 | 7.0.9 | Open; no suppression or dependency upgrade |
+  | [CVE-2026-47890](https://spring.io/security/cve-2026-47890/) | 6.2.19 | 7.0.9 | Open; no suppression or dependency upgrade |
+
+  Spring Boot 4.0.9 manages Spring Framework 7.0.10, which is beyond these fixed versions, but a major application upgrade needs a separate compatibility review. Upstream Spring rates these findings MEDIUM and LOW respectively; Trivy reports them as CRITICAL. Their documented trigger conditions involve XSLT view rendering or SSE view fragments, which this REST application does not configure. The package findings remain unresolved.
+- **Architecture:** published images currently contain `linux/amd64` only. No `linux/arm64` image has been published; ARM64 deployment is untested.
+- **Release tags:** CI publishes commit-SHA image tags only. There is no release/version image tag.
+- **Platform coverage:** Windows 11 with Docker Desktop and WSL2 Ubuntu are tested. Native macOS and standalone Linux Docker Engine are untested.
+- **Local deployment scope:** one Kind node, no high availability, backups, ingress TLS, NetworkPolicies, external secret management or remote continuous deployment. HTTP access is via localhost forwarding. Destroying the cluster deletes the database and monitoring history.
+- **Optional analysis:** SonarCloud is skipped until its repository configuration and token are supplied.
+- **Secrets:** deployment database and Grafana passwords are generated at apply time. Terraform state contains them in plaintext and must stay private. CI uses disposable per-run MySQL credentials. There is no deployed `admin/admin` Grafana default; authentication and service access are intended for this local exercise.
+- **Chart defaults:** the standalone application chart's `crewmeister-app:local` image is a development placeholder. Setup supplies a published SHA or a loaded local image; installing the chart directly requires the corresponding image and database settings.
 
 ## Direct integration tests
 
-Install Java 17 and use a disposable MySQL database named `challenge`. Its account must apply the schema and read/write tables. Flyway uses the writer URL. Never use a production database.
+Install Java 17 and use a separate disposable MySQL database named `challenge`. Its account must apply the schema and read/write tables. The Windows check used Docker-published localhost port 13306 and passed all six tests. A JDBC test through a Kubernetes MySQL port-forward lost its connection during startup; use a separate test database rather than depending on that tunnel. Flyway uses the writer URL. Never use a production database.
+
+Replace the installation path and credentials below with those of your disposable database; do not print or commit them.
 
 ```powershell
 $env:JAVA_HOME = '<Java 17 installation>'
-$env:SPRING_DATASOURCE_URL = 'jdbc:mysql://127.0.0.1:3306/challenge'
+$env:SPRING_DATASOURCE_URL = 'jdbc:mysql://127.0.0.1:13306/challenge'
 $env:SPRING_DATASOURCE_WRITER_URL = $env:SPRING_DATASOURCE_URL
 $env:SPRING_DATASOURCE_USERNAME = '<database-user>'
 $env:SPRING_DATASOURCE_PASSWORD = '<database-password>'
 .\mvnw.cmd --batch-mode clean verify
 ```
 
-```bash
-export JAVA_HOME='<Java 17 installation>'
-export SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:3306/challenge'
-export SPRING_DATASOURCE_WRITER_URL="$SPRING_DATASOURCE_URL"
-export SPRING_DATASOURCE_USERNAME='<database-user>'
-export SPRING_DATASOURCE_PASSWORD='<database-password>'
-bash ./mvnw --batch-mode clean verify
-```
+The [CI workflow](.github/workflows/ci.yml) runs the Bash Maven command against its own disposable MySQL service. Direct Maven execution on the WSL host was not repeated in the latest audit.
+
+## Screenshots
+
+Captured during the fresh Windows deployment on 2026-11-03. The Grafana capture shows live metrics; the pod-status image is a rendered capture of actual kubectl output, not a desktop terminal screenshot. No credentials are included.
+
+![Grafana dashboard with eight populated panels](docs/screenshots/grafana-dashboard.png)
+
+![Live Kubernetes pod status and bound MySQL storage](docs/screenshots/running-pods.png)
 
 ## Troubleshooting and tradeoffs
 
