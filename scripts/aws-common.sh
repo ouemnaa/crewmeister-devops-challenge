@@ -46,15 +46,17 @@ aws_config() {
     operator_role="$(jq -r .operator_role_arn "$aws_config_file")"
     [[ "$operator_role" == arn:aws:iam::"$expected_account":role/* ]] || aws_fail 'IAM role must belong to the expected account.'
     jq -e '
+      def narrow_cidr:
+        test("^([0-9]{1,3}\\.){3}[0-9]{1,3}/(2[4-9]|3[0-2])$") and
+        (split("/")[0] | split(".") | all(.[]; tonumber >= 0 and tonumber <= 255)) and
+        (test("^(203\\.0\\.113|198\\.51\\.100|192\\.0\\.2)\\.") | not);
+      (.allow_unrestricted_api // false) as $public |
       (.image_repository | test("^ghcr.io/[a-z0-9._/-]+$")) and
       (.image_tag | test("^[0-9a-f]{40}$")) and .image_tag != "0000000000000000000000000000000000000000" and
       (.enable_public_ingress | type == "boolean") and
-      ([.api_access_cidrs, .client_access_cidrs] | all(.[];
-        type == "array" and length > 0 and all(.[];
-          test("^([0-9]{1,3}\\.){3}[0-9]{1,3}/(2[4-9]|3[0-2])$") and
-          (split("/")[0] | split(".") | all(.[]; tonumber >= 0 and tonumber <= 255)) and
-          (test("^(203\\.0\\.113|198\\.51\\.100|192\\.0\\.2)\\.") | not)
-        )))
+      ($public | type == "boolean") and
+      (.api_access_cidrs | type == "array" and length > 0 and all(.[]; narrow_cidr)) and
+      (.client_access_cidrs | type == "array" and length > 0 and all(.[]; (. == "0.0.0.0/0" and $public) or narrow_cidr))
     ' "$aws_config_file" >/dev/null || aws_fail 'Replace example CIDRs/image values and use explicit IPv4 /24 or narrower.'
     local certificate
     certificate="$(jq -r '.certificate_arn // empty' "$aws_config_file")"

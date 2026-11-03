@@ -58,7 +58,7 @@ $common = @{aws_profile=$c.aws_profile; aws_region=$c.aws_region; expected_accou
 $bootstrap = $common.Clone(); $bootstrap.state_bucket=$c.state_bucket; $bootstrap.deployment_principal_arn=$c.operator_role_arn
 $cluster = $common.Clone(); $cluster.operator_role_arn=$c.operator_role_arn; $cluster.api_access_cidrs=@($c.api_access_cidrs)
 $platform = $common.Clone()
-foreach ($field in @('state_bucket','image_repository','image_tag','client_access_cidrs','enable_public_ingress','certificate_arn')) { $platform[$field]=$c.$field }
+foreach ($field in @('state_bucket','image_repository','image_tag','client_access_cidrs','enable_public_ingress','allow_unrestricted_api','certificate_arn')) { $platform[$field]=$c.$field }
 Write-AwsPrivateFile $paths[0] ($bootstrap | ConvertTo-Json -Depth 5)
 Write-AwsPrivateFile $paths[1] ($cluster | ConvertTo-Json -Depth 5)
 Write-AwsPrivateFile $paths[2] ($platform | ConvertTo-Json -Depth 5)

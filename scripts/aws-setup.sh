@@ -57,7 +57,7 @@ mkdir -p -- "$aws_private_dir"
     set -o noclobber
     jq '{aws_profile,aws_region,expected_account_id,cluster_name,state_bucket,deployment_principal_arn:.operator_role_arn}' "$aws_config_file" >"$aws_private_dir/bootstrap.tfvars.json"
     jq '{aws_profile,aws_region,expected_account_id,cluster_name,operator_role_arn,api_access_cidrs}' "$aws_config_file" >"$aws_private_dir/cluster.tfvars.json"
-    jq '{aws_profile,aws_region,expected_account_id,cluster_name,state_bucket,image_repository,image_tag,client_access_cidrs,enable_public_ingress,certificate_arn}' "$aws_config_file" >"$aws_private_dir/platform.tfvars.json"
+    jq '{aws_profile,aws_region,expected_account_id,cluster_name,state_bucket,image_repository,image_tag,client_access_cidrs,enable_public_ingress,allow_unrestricted_api:(.allow_unrestricted_api // false),certificate_arn}' "$aws_config_file" >"$aws_private_dir/platform.tfvars.json"
     jq -r '
       "bucket = " + (.state_bucket | tojson),
       "region = " + (.aws_region | tojson),

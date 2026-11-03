@@ -30,6 +30,7 @@ A successful static check is not evidence of a working EKS deployment.
   Main workload memory limits total about 2.9 GiB; EKS add-ons, controllers and the OS also consume memory.
 - API ingress is disabled by default. When approved, one internet-facing ALB routes **exactly /user**, including query strings.
   Its default backend returns 404; readiness health checks reach Actuator internally without publishing an Actuator listener rule.
+  Client access defaults to explicit CIDRs; worldwide IPv4 API access requires `allow_unrestricted_api=true`.
 - Application, MySQL, Grafana and Prometheus Services remain ClusterIP. Access monitoring through localhost port-forwarding.
 
 This is a disposable demonstration, not a highly available production design. A node replacement or update can interrupt every workload.
@@ -88,6 +89,7 @@ Use an independently confirmed expected account, not an account ID automatically
 Copy `terraform/aws/deployment.example.json` to ignored `.local/aws/deployment.json`.
 Replace every placeholder, including documentation IP addresses, with your own values.
 Keep public ingress false initially. Supply your durable IAM operator role ARN, not an STS assumed-role session ARN.
+Keep `allow_unrestricted_api=false` unless you intentionally want everyone to reach the API.
 Use a unique bucket name in your account. Do not commit this private file.
 
 PowerShell, from the repository root:
@@ -355,6 +357,11 @@ then apply only that approved saved plan. Initial private inputs are false for s
 record the approved enabled state in your ignored deployment/platform inputs so subsequent plans preserve it.
 The committed example and Terraform defaults remain false.
 The chosen client CIDRs constrain the ALB security group.
+To make only the application API reachable worldwide, explicitly set `allow_unrestricted_api=true` and
+`client_access_cidrs=["0.0.0.0/0"]` in the ignored deployment configuration and generated platform inputs.
+Review/apply a platform plan changing only the Ingress annotation. This never changes `api_access_cidrs`:
+the EKS management endpoint remains restricted to administrator /32 addresses, and the ALB still rejects every
+path except `/user`. The API has no authentication; public HTTP access is for temporary dummy-data demonstrations.
 Without a certificate this is restricted HTTP for dummy demonstration data, not secure transport.
 For HTTPS, supply an existing Stockholm ACM certificate and use its matching domain pointed at the ALB;
 the configuration does not create DNS or a certificate. An ALB hostname will not match your custom-domain certificate.
@@ -362,7 +369,8 @@ the configuration does not create DNS or a certificate. An ALB hostname will not
 Get the hostname with `terraform -chdir=terraform/aws/platform output -raw api_hostname`.
 Acceptance from an allowed client: GET and POST `/user` work; `/user?id=1` works;
 `/`, `/user/other`, `/actuator/health`, `/actuator/prometheus` and Grafana paths return 404.
-From an unapproved source address the listener must be unreachable.
+In the default CIDR-restricted mode, the listener must be unreachable from an unapproved source.
+With explicit worldwide access enabled, `/user` is reachable from any IPv4 source; the same path filtering still applies.
 ALB internal health probes may reach readiness; that must not create a public Actuator route.
 Existing application vulnerabilities remain unresolved: see [validation](validation.md) and the README limitations.
 Use dummy data and keep exposure brief.
@@ -427,8 +435,13 @@ This does not establish eligibility for other accounts or a guarantee about futu
 Public API acceptance also passed: the ALB target was healthy; GET/POST and persisted readback worked through its
 hostname; query strings were forwarded; `/`, `/user/other`, Actuator health/metrics and Grafana login/health paths
 returned 404. The listener's default action was verified as fixed-response 404 and its security groups allowed only
-the approved client /32. A request from a second, unapproved source IP was not performed; CIDR isolation was checked
+the initially approved client /32. A request from a second, unapproved source IP was not performed; CIDR isolation was checked
 through the actual AWS security-group configuration. HTTP is unencrypted and intended only for dummy demo data.
+
+The owner subsequently approved worldwide API access. With `allow_unrestricted_api=true`, the ALB client CIDR
+was changed to `0.0.0.0/0`; public GET/POST/readback and the management-path 404 checks passed again.
+The EKS management endpoint remained restricted to its administrator /32. Worldwide access was checked through
+the actual ALB security-group configuration; an independent second-network HTTP request was not performed.
 
 Pending: complete teardown/leftover audit and a full Bash deployment.
 PowerShell 5.1 live checks passed; Git Bash checks were static/offline only. WSL, native Linux and macOS cloud
@@ -450,4 +463,5 @@ changes before applying. Do not delete state, bypass the lock or recreate the wh
 The EKS public API is restricted to a specific IPv4 /32. If your ISP/VPN changes that address, update the private
 deployment configuration and generated cluster/platform CIDR inputs, preserving backups, then review/apply a
 cluster plan that updates only the API CIDR. Update the ALB's client CIDR through a reviewed platform plan too
-if ingress is enabled. Never temporarily open either endpoint to 0.0.0.0/0.
+if ingress is enabled in restricted-client mode. Never open the Kubernetes management endpoint to 0.0.0.0/0.
+Worldwide application API access is a separate explicit opt-in as described above.

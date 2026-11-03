@@ -57,6 +57,8 @@ function Read-AwsConfig {
     if (-not $fullPath.StartsWith($privateRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Private configuration must be inside .local/aws/.' }
     $script:AwsConfig = Get-Content -LiteralPath $fullPath -Raw | ConvertFrom-Json
     $c = $script:AwsConfig
+    if ($c.PSObject.Properties.Name -notcontains 'allow_unrestricted_api') { $c | Add-Member -NotePropertyName allow_unrestricted_api -NotePropertyValue $false }
+    if ($c.allow_unrestricted_api -isnot [bool]) { throw 'allow_unrestricted_api must be a JSON boolean.' }
     if ($c.aws_profile -eq 'default' -or $c.aws_profile -notmatch '^[A-Za-z0-9_-]+$') { throw 'Supply an explicit non-default profile.' }
     if ($c.aws_region -ne 'eu-north-1') { throw 'Only the reviewed eu-north-1 region is accepted.' }
     if ($c.expected_account_id -notmatch '^[0-9]{12}$') { throw 'Supply your independently confirmed account ID.' }
@@ -69,6 +71,7 @@ function Read-AwsConfig {
         $cidrs = @($c.$field)
         if ($cidrs.Count -eq 0) { throw "$field must not be empty." }
         foreach ($cidr in $cidrs) {
+            if ($field -eq 'client_access_cidrs' -and $cidr -eq '0.0.0.0/0' -and $c.allow_unrestricted_api) { continue }
             if ($cidr -notmatch '^(\d{1,3}\.){3}\d{1,3}/(2[4-9]|3[0-2])$') { throw "$field requires IPv4 /24 or narrower." }
             $ip = $null
             if (-not [Net.IPAddress]::TryParse(($cidr -split '/')[0], [ref]$ip)) { throw "Invalid CIDR in $field." }

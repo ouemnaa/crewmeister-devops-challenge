@@ -47,7 +47,13 @@ function Expect-Rejected {
 $config.aws_profile='default'; Save-Fixture
 Expect-Rejected 'non-default'
 if ($global:AwsGuardCalls -ne 0) { throw 'Default profile reached AWS.' }
-$config.aws_profile='testing'; $config.api_access_cidrs=@('0.0.0.0/0'); Save-Fixture
+$config.aws_profile='testing'; $config.client_access_cidrs=@('0.0.0.0/0'); Save-Fixture
+Expect-Rejected 'CIDR|/24'
+$config.allow_unrestricted_api=$true; Save-Fixture
+. "$repo/scripts/aws-common.ps1"
+Read-AwsConfig $relative
+if (-not $script:AwsConfig.allow_unrestricted_api) { throw 'Explicit public API opt-in was not accepted.' }
+$config.api_access_cidrs=@('0.0.0.0/0'); Save-Fixture
 Expect-Rejected 'CIDR|/24'
 if ($global:AwsGuardCalls -ne 0) { throw 'Open API CIDR reached AWS.' }
 $config.api_access_cidrs=@('8.8.8.8/32'); Save-Fixture
@@ -62,4 +68,4 @@ $after = Get-FileHash -LiteralPath (Join-Path $privateDir 'cluster.tfvars.json')
 if ($before.Hash -ne $after.Hash) { throw 'Existing private inputs were overwritten.' }
 $generated = Get-Content -LiteralPath (Join-Path $privateDir 'backend.hcl') -Raw
 if ($generated -notmatch 'allowed_account_ids' -or $generated -match 'access_key|secret_key|token') { throw 'Unsafe generated backend configuration.' }
-Write-Host 'PASS: default profile, world-open CIDR, wrong account, private preparation and overwrite protection (offline stubs).'
+Write-Host 'PASS: public API requires opt-in; Kubernetes API remains restricted; identity and overwrite guards pass (offline stubs).'

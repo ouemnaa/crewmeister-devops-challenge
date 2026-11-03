@@ -51,14 +51,21 @@ variable "image_tag" {
     error_message = "Use an exact full commit SHA, never latest or a local tag."
   }
 }
+variable "allow_unrestricted_api" {
+  type        = bool
+  default     = false
+  description = "Explicit opt-in for worldwide IPv4 access to /user only; never changes Kubernetes API access."
+}
 variable "client_access_cidrs" {
   type        = list(string)
   description = "Approved demonstration client IPv4 CIDRs."
   validation {
     condition = length(var.client_access_cidrs) > 0 && alltrue([
-      for cidr in var.client_access_cidrs : can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) >= 24, false)
+      for cidr in var.client_access_cidrs : can(cidrnetmask(cidr)) && (
+        try(tonumber(split("/", cidr)[1]) >= 24, false) || (cidr == "0.0.0.0/0" && var.allow_unrestricted_api)
+      )
     ])
-    error_message = "Supply IPv4 CIDRs /24 or narrower; prefer your /32."
+    error_message = "Use IPv4 /24 or narrower, or explicitly opt in with allow_unrestricted_api=true for 0.0.0.0/0."
   }
 }
 variable "enable_public_ingress" {

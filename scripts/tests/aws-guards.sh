@@ -47,6 +47,10 @@ reject() {
 }
 jq '.aws_profile="default"' <<<"$config" >"$fixture"
 reject 'Invalid private AWS configuration'
+jq '.client_access_cidrs=["0.0.0.0/0"]' <<<"$config" >"$fixture"
+reject 'IPv4 /24'
+config="$(jq '.allow_unrestricted_api=true | .client_access_cidrs=["0.0.0.0/0"]' <<<"$config")"
+(source scripts/aws-common.sh; printf '%s\n' "$config" >"$fixture"; aws_config "$relative")
 jq '.api_access_cidrs=["0.0.0.0/0"]' <<<"$config" >"$fixture"
 reject 'IPv4 /24'
 printf '%s\n' "$config" >"$fixture"
@@ -59,4 +63,4 @@ before="$(cat "$private_dir/cluster.tfvars.json")"
 reject 'Preparation files exist'
 [[ "$before" == "$(cat "$private_dir/cluster.tfvars.json")" ]] || { echo 'Inputs overwritten.' >&2; exit 1; }
 [[ "$(cat "$private_dir/backend.hcl")" == *allowed_account_ids* ]]
-echo 'PASS: default profile, world-open CIDR, wrong account, private preparation and overwrite protection (offline stubs).'
+echo 'PASS: public API requires opt-in; Kubernetes API remains restricted; identity and overwrite guards pass (offline stubs).'
