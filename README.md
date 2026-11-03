@@ -4,7 +4,7 @@ A Java 17 / Spring Boot 3.5.16 user API, deployed on Kubernetes with Terraform a
 
 [![CI](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/workflows/ci.yml)
 
-[Quick start](#quick-start-local) · [How it works](#how-it-works) · [CI pipeline](#ci-pipeline) · [AWS EKS](#aws-eks-optional) · [Limitations](#known-limitations-and-tested-platforms)
+[Quick start](#quick-start-local) · [How it works](#how-it-works) · [CI pipeline](#ci-pipeline) · [AWS EKS](#aws-eks-optional) · [Limitations](#known-limitations)
 
 ## Overview
 
@@ -53,114 +53,55 @@ flowchart LR
 | GitHub CI | [.github/workflows/ci.yml](.github/workflows/ci.yml): tests, validation, scans, gated image publishing | [CI pipeline](#ci-pipeline) |
 | Monitoring | [monitoring](monitoring): Prometheus, MySQL exporter and provisioned Grafana dashboard | [Open monitoring](#3-open-monitoring) |
 
-## Quick Start — Local Kubernetes
+## Quick start (local)
 
-Run the complete Crewmeister stack locally using **Kind, Terraform, and Helm**. The setup provisions a Kubernetes cluster and deploys the Spring Boot application, MySQL, Prometheus, and Grafana.
+Deploy the complete stack on a local Kind cluster with Terraform and Helm. **No AWS account or host Java installation is required.**
 
-### Prerequisites
+**You need:** Docker Desktop or Docker Engine running Linux containers (at least 4 CPUs and 6 GiB RAM), Terraform **1.15.8**, Kind **0.33.0**, kubectl **1.35–1.37**, Helm **4.3.1**, and Git. Setup enforces the Terraform and Kind versions. The first Windows deployment took approximately **11 minutes**.
 
-- **Docker:** Linux containers enabled, with at least 4 CPUs and 6 GiB RAM allocated.
-- **CLI tools:** Terraform, Kind, kubectl, and Helm installed and available on `PATH`.
-- **Shell:** PowerShell 5.1+ (Windows) or Bash 5.1+ (Linux/WSL).
+### 1. Deploy and verify
 
-The first deployment takes approximately **11 minutes on Windows**.
-
-| Tool | Required / tested version |
-|---|---|
-| Docker Engine | 28.0.4 tested |
-| Terraform | 1.15.8 (enforced) |
-| Kind | 0.33.0 (enforced) |
-| kubectl | 1.35–1.37 (1.36.4 tested) |
-| Helm | 4.3.1 |
-| curl | 7.81+ (Bash setup) |
-
-### Platform Compatibility
-
-| Environment | Status |
-|---|---|
-| Windows 11 + Docker Desktop | ✅ Tested |
-| Ubuntu on WSL2 + Docker Desktop | ✅ Tested |
-| Native Linux | Not yet tested |
-| macOS / Apple Silicon | Not yet tested |
-
-> **Important:** Run setup, verification, and teardown from the same environment. Avoid switching between Windows and WSL within the same checkout.
-
-### Local Access
-
-Once deployed, the services are accessible through localhost port-forwarding.
-
-| Service | Local address |
-|---|---|
-| Spring Boot API | `http://localhost:18080` |
-| Grafana | `http://localhost:13000` |
-| Prometheus | `http://localhost:19090` |
-
-If a port is already in use, change the local port number (before the colon) in the corresponding `kubectl port-forward` command.
-
-<details>
-<summary>Additional requirements and technical notes</summary>
-
-- **Git 2.x** is required to clone the repository.
-- Install CLI binaries compatible with your operating system and CPU architecture.
-- **Java installation is not required locally.** The Docker build uses Java 17.
-- Docker needs internet access to GitHub, Maven Central, Helm chart repositories, and container registries.
-- **8 GiB of RAM is recommended** for additional headroom during image builds.
-- **cgroup v2** is preferred. When needed, the setup enables Kubernetes' cgroup-v1 compatibility setting without modifying the host.
-- MySQL (port 3306) and MySQL Exporter (port 9104) remain internal to Kubernetes.
-- The Kind Kubernetes API uses a dynamically assigned localhost port.
-- For WSL2, Docker Desktop's WSL integration must be enabled.
-
-</details>
-
-
-### 1. Create and Verify the Local Environment
-
-Choose your operating system and follow the commands below to deploy and verify the complete Kubernetes stack.
+Choose the commands for your environment. **Setup, verification, and teardown must all run from the same environment and checkout.**
 
 #### Windows — PowerShell
 
-**1. Check prerequisites**
-
-Make sure Docker Desktop is running with Linux containers enabled.
-
-```powershell
-terraform version
-kind version
-kubectl version --client
-helm version --short
-docker info --format '{{.OSType}}'
-```
-
-Docker should report `linux`.
-
-**2. Clone the repository**
-
 ```powershell
 git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
 cd crewmeister-devops-challenge
-```
-
-**3. Deploy the environment**
-
-```powershell
 .\scripts\setup.ps1
-```
-
-**4. Verify the deployment**
-
-```powershell
 .\scripts\verify.ps1
 ```
 
-> If PowerShell blocks script execution, run the script using `powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1`. This does not change the machine-wide execution policy.
+Docker Desktop must be running in **Linux containers** mode. If PowerShell blocks a script, run it in a separate process with `powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1` (and similarly for `verify.ps1`). This does not change the machine-wide execution policy.
 
-#### Linux / WSL2 / macOS — Bash
-
-**1. Check prerequisites**
-
-Ensure Docker is running and accessible from your terminal.
+#### WSL2 / Linux / macOS — Bash
 
 ```bash
+git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
+cd crewmeister-devops-challenge
+bash scripts/setup.sh
+bash scripts/verify.sh
+```
+
+The Bash deployment was tested on **WSL2 Ubuntu**. Native Linux and macOS are **not yet tested**, and the published image is `linux/amd64` only; Apple Silicon compatibility is not established. In WSL2, use Linux CLI binaries and enable Docker Desktop integration for your distribution.
+
+<details>
+<summary>Tool versions, environment checks, and additional requirements</summary>
+
+| Tool | Required / tested version |
+| --- | --- |
+| Docker Engine | 28.0.4 tested; Linux containers |
+| Terraform | 1.15.8 (enforced) |
+| Kind | 0.33.0 (enforced) |
+| kubectl | 1.35–1.37 (1.36.4 tested) |
+| Helm | 4.3.1 tested |
+| PowerShell | 5.1+ |
+| Bash | 5.1+, with curl 7.81+ |
+| Git | 2.x |
+
+Check your tools before starting if needed:
+
+```text
 terraform version
 kind version
 kubectl version --client
@@ -168,32 +109,13 @@ helm version --short
 docker info --format '{{.OSType}}'
 ```
 
-Docker should report `linux`.
+Docker must report `linux`. Allocate **8 GiB RAM** for extra build headroom when possible. Docker needs internet access to GitHub, Maven Central, Helm chart repositories and container registries. The Dockerfile builds with Java 17, so no host JDK is necessary.
 
-**2. Clone the repository**
+Kind prefers cgroup v2; the setup can enable Kubernetes cgroup-v1 compatibility without modifying the host. WSL2 requires Docker Desktop integration. Use binaries built for your OS and CPU architecture. Do not mix Windows and WSL lifecycle commands in one checkout.
 
-```bash
-git clone https://github.com/ouemnaa/crewmeister-devops-challenge.git
-cd crewmeister-devops-challenge
-```
+</details>
 
-**3. Deploy the environment**
-
-```bash
-bash scripts/setup.sh
-```
-
-**4. Verify the deployment**
-
-```bash
-bash scripts/verify.sh
-```
-
-**Platform support:** The Bash workflow has been tested on WSL2 Ubuntu. Native Linux and macOS remain untested. The published image is amd64-only, so Apple Silicon compatibility is not established.
-
-For WSL2, use Linux CLI binaries and enable Docker Desktop integration for your distribution.
-
-Setup creates one Kind node and four releases: MySQL, application, monitoring and MySQL exporter. The local scripts apply Terraform automatically for this dedicated environment. They use `.local/crewmeister.kubeconfig` and context `kind-crewmeister`, leaving the default kubeconfig untouched.
+Setup provisions one Kind node and **four Helm releases**: MySQL, Spring Boot application, monitoring, and MySQL Exporter. The scripts use `.local/crewmeister.kubeconfig` and the `kind-crewmeister` context instead of your default kubeconfig. Verification checks deployment readiness, GET/POST API behavior, persistent data, health and metrics endpoints, Prometheus targets, and Grafana.
 
 <p align="center">
   <a href="docs/screenshots/local-setup-progress.png"><img src="docs/screenshots/local-setup-progress.png" width="560" alt="Local Terraform apply showing application workloads and a bound MySQL PVC"></a>
@@ -205,48 +127,56 @@ Verification checks nodes, workloads, storage, seeded GET, POST and persisted re
 
 ### 2. Test the API
 
-From the repository root, keep this command running in its own terminal. The `localhost` binding keeps the tunnel local to your machine.
+Keep this port-forward running in one terminal, from the repository root:
 
-```text
+```bash
 kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address localhost service/crewmeister-app 18080:8080
 ```
 
-<details>
-<summary>GET and POST from a second terminal</summary>
+Then make requests from a **second terminal**.
 
-PowerShell:
+**PowerShell:**
 
 ```powershell
 Invoke-RestMethod 'http://localhost:18080/user?id=1'
 Invoke-RestMethod 'http://localhost:18080/user' -Method Post -ContentType 'application/json' -Body '{"name":"Reviewer"}'
 ```
 
-Bash:
+**Bash:**
 
 ```bash
 curl --fail 'http://localhost:18080/user?id=1'
 curl --fail -H 'Content-Type: application/json' --data '{"name":"Reviewer"}' 'http://localhost:18080/user'
 ```
 
-GET returns the seeded Alice greeting. POST persists the name and returns its greeting; it does not return the generated database ID. Use dummy data. Health and metrics paths are internal and unauthenticated for this exercise.
-
-</details>
+The GET request returns the **Alice** greeting seeded by Flyway. POST stores a new user in MySQL and returns a greeting (not the generated user ID). Use only dummy data.
 
 ### 3. Open monitoring
 
-Keep each command running in a separate terminal, from the repository root:
+Run each port-forward in a **separate terminal** from the repository root:
 
-```text
+```bash
+# Grafana
 kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address localhost service/crewmeister-grafana 13000:80
+```
+
+```bash
+# Prometheus
 kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister port-forward --address localhost service/crewmeister-monitoring-prometheus 19090:9090
 ```
 
-Open Grafana at **http://localhost:13000** and Prometheus at **http://localhost:19090**. If a port is occupied, change the local number before the colon and the URL to match.
+| Service | Local URL |
+| --- | --- |
+| Spring Boot API | http://localhost:18080 |
+| Grafana | http://localhost:13000 |
+| Prometheus | http://localhost:19090 |
+
+If a local port is already in use, change the number **before the colon** in the corresponding port-forward and use the matching URL. MySQL (3306) and MySQL Exporter (9104) remain internal; the Kind Kubernetes API uses a random localhost port.
 
 <details>
-<summary>Retrieve the generated Grafana password without printing it</summary>
+<summary>Log in to Grafana using the generated administrator password</summary>
 
-The username is `admin`. There is no `admin/admin` default. In PowerShell, copy the password directly to the clipboard and paste it into the login form:
+The Grafana username is `admin`; there is no `admin/admin` default. In PowerShell, copy the password to the clipboard without printing it:
 
 ```powershell
 $secret = kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get secret crewmeister-grafana-admin -o json | ConvertFrom-Json
@@ -255,7 +185,7 @@ Set-Clipboard -Value $grafanaPassword
 Remove-Variable secret, grafanaPassword
 ```
 
-Replace the clipboard contents with non-sensitive text after login. Do not display Secret contents or record the clipboard.
+Replace clipboard contents with non-sensitive text after logging in. Do not record the Secret or clipboard.
 
 Bash can capture the password without printing it:
 
@@ -263,13 +193,13 @@ Bash can capture the password without printing it:
 grafana_password="$(kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get secret crewmeister-grafana-admin -o go-template --template='{{index .data "admin-password" | base64decode}}')"
 ```
 
-Transfer the variable through your local clipboard utility, then `unset grafana_password`. OS-specific Bash clipboard integration is not validated by this repository; do not echo the password for a screenshot. WSL users can use the tested PowerShell clipboard procedure from Windows against the same checkout.
+Transfer the password with your local clipboard utility, then `unset grafana_password`. Bash clipboard integration varies by OS and has not been validated; WSL2 users can use the Windows PowerShell clipboard method against the same checkout.
 
 </details>
 
-In Grafana, open **Dashboards → Crewmeister → Crewmeister application**. The eight panels cover availability, request rate, latency, HTTP errors, JVM memory, restarts and MySQL health and connections. Run API requests to generate traffic; rate panels need at least two scrapes.
+In Grafana, open **Dashboards → Crewmeister → Crewmeister application**. The provisioned panels show availability, request rate, latency, HTTP errors, JVM memory, restarts, MySQL health, and connections. Generate API traffic if the graphs are initially empty.
 
-In Prometheus, run `up{namespace="crewmeister",service="crewmeister-app"}` and `mysql_up{namespace="crewmeister",service="crewmeister-mysql-exporter"}`. Each should return `1`.
+In Prometheus, query `up{namespace="crewmeister",service="crewmeister-app"}` and `mysql_up{namespace="crewmeister",service="crewmeister-mysql-exporter"}`; each should return `1` when healthy.
 
 <table>
   <tr>
@@ -283,103 +213,55 @@ In Prometheus, run `up{namespace="crewmeister",service="crewmeister-app"}` and `
 
 ### 4. Tear down the local environment
 
-Stop manual port-forwards with Ctrl+C, then run the command for the OS environment used during setup:
+Stop any manual port-forwards with **Ctrl+C**. Then use the same environment you used for setup.
+
+**PowerShell:**
 
 ```powershell
 .\scripts\down.ps1
 ```
 
+**Bash:**
+
 ```bash
 bash scripts/down.sh
 ```
 
-Teardown destroys the platform before the Kind cluster and checks ownership and cluster identity. **This deletes the demonstration database.** Keep the checkout, state and dedicated kubeconfig until teardown finishes. Do not run lifecycle commands concurrently or delete state to work around a failure.
+The script destroys the **platform first, then the Kind cluster**, with resource identity checks. **This deletes the demonstration database.** Do not discard local state or the dedicated kubeconfig before teardown completes.
 
 ## How it works
 
+The local environment is provisioned in two stages: Terraform first creates Kind, then uses the dedicated kubeconfig to install the application and supporting services through Helm. The AWS environment uses separate Terraform configurations and state.
+
 ### Terraform ownership
 
-Local setup runs two Terraform stages in order. The cluster stage creates Kind and writes a dedicated kubeconfig. The platform stage reads that kubeconfig and installs everything on top.
+- `terraform/cluster/` manages the local Kind cluster.
+- `terraform/platform/` manages the local namespace, generated Secrets, and Helm releases.
+- Each root keeps an **independent local Terraform state**. AWS does not reuse either state.
 
-```mermaid
-sequenceDiagram
-    participant S as Setup script
-    participant C as terraform/cluster
-    participant K as Kind cluster
-    participant P as terraform/platform
-    participant H as Helm releases
-    S->>C: init and apply
-    C->>K: create node and API
-    C-->>S: write .local/crewmeister.kubeconfig
-    Note over S: choose image, GHCR pull or local build
-    S->>P: init and apply with kubeconfig and image tag
-    P->>H: namespace, Secrets, then four Helm releases
-    H->>K: pods start and become ready
-```
-
-Each stage keeps its own state: `terraform/cluster/terraform.tfstate` and `terraform/platform/terraform.tfstate`.
-
-Terraform generates database and Grafana passwords at apply time. **State contains passwords in plaintext**, even when outputs are sensitive. State, plans, private inputs and kubeconfigs are ignored by Git and must stay private; provider lock files are committed.
+Terraform state can contain generated database and Grafana passwords **in plaintext**, even when Terraform marks values sensitive. State, saved plans, private inputs and kubeconfigs are excluded from Git; provider lock files are committed.
 
 ### Helm
 
-Terraform installs four Helm releases. The application chart is maintained in this repository; the others are pinned upstream charts. MySQL uses the official 8.4 image pinned by digest.
-
-```mermaid
-flowchart LR
-    tf["Terraform helm_release"] --> r1["mysql release"]
-    tf --> r2["application release"]
-    tf --> r3["monitoring release"]
-    tf --> r4["mysql exporter release"]
-    r1 --> o1["StatefulSet, Service, PVC"]
-    r2 --> o2["Deployment, Service, probes, ServiceMonitor"]
-    r3 --> o3["Prometheus, Grafana, operator"]
-    r4 --> o4["Exporter Deployment, ServiceMonitor"]
-```
-
-Upstream chart versions: MySQL **3.1.5**, kube-prometheus-stack **92.17.0**, prometheus-mysql-exporter **2.16.0**.
+Terraform manages four Helm releases: **MySQL, application, kube-prometheus-stack, and MySQL Exporter**. The application chart lives in [`helm/crewmeister-app/`](helm/crewmeister-app); upstream chart versions are pinned to MySQL `3.1.5`, kube-prometheus-stack `92.17.0` and prometheus-mysql-exporter `2.16.0`. The MySQL 8.4 image is pinned by digest.
 
 ### Kubernetes runtime
 
-```mermaid
-flowchart LR
-    subgraph ns ["namespace crewmeister"]
-        app["Spring Boot app"] -->|"JDBC 3306"| mysql[("MySQL with 2 GiB PVC")]
-        exporter["MySQL exporter"] --> mysql
-        prom["Prometheus"] -->|"scrapes metrics"| app
-        prom -->|"scrapes metrics"| exporter
-        grafana["Grafana dashboard"] -->|"queries"| prom
-    end
+The Spring Boot app communicates with MySQL over its internal service. Prometheus scrapes application and MySQL exporter metrics, and Grafana visualizes them. The local deployment exposes **no public Kubernetes Services**: access is through `kubectl port-forward`. The MySQL PVC survives pod replacement; teardown deletes the demonstration data. Prometheus uses ephemeral local storage with a six-hour retention period.
 
-    you(["Reviewer on localhost"]) -. "port-forward" .-> app
-    you -. "port-forward" .-> grafana
-    you -. "port-forward" .-> prom
-```
-
-Nothing is exposed publicly in the local setup: every Service is ClusterIP and you reach it through `kubectl port-forward`. MySQL stays internal. Its PVC survives pod replacement; namespace or cluster destruction removes the data. Prometheus storage is ephemeral with six-hour local retention, and shared values disable unused monitoring components to save resources.
-
-The application runs as UID 10001, drops all capabilities, disallows privilege escalation and has a read-only root filesystem with writable `/tmp`. It receives no service-account token. Startup, liveness and database-aware readiness probes control rollout and traffic.
+The application runs as non-root UID `10001`, drops capabilities, uses a read-only root filesystem, disables service-account-token mounting, and has startup, liveness, and database-aware readiness probes.
 
 ### Image delivery
 
-```mermaid
-flowchart LR
-    setup["Setup script"] --> check{"Image for this commit in GHCR, and no local changes?"}
-    check -->|"yes"| ghcr["Public GHCR image"]
-    ghcr --> pull["Kubernetes pulls it, IfNotPresent"]
-    check -->|"no"| build["Local Docker build"]
-    build --> load["kind load, pull policy Never"]
-    pull --> deploy["Application Deployment"]
-    load --> deploy
-```
+The default image is `ghcr.io/ouemnaa/crewmeister-devops-challenge:<full-commit-SHA>`. Local setup selects an existing public image when the checkout is eligible; otherwise, `auto` mode builds and imports an image into Kind. Registry images use `IfNotPresent`; local images use pull policy `Never`. No path uses `latest`.
 
-The default image is `ghcr.io/ouemnaa/crewmeister-devops-challenge:<full-commit-SHA>`. Registry images use `IfNotPresent`; locally built, content-tagged images use `Never`. Only local builds pass through Kind's image import. A missing published tag falls back to a local build in the default `auto` mode.
+Set `CREWMEISTER_IMAGE_MODE=local` to force a build or `registry` to require an already published image. `CREWMEISTER_IMAGE_TAG` and `CREWMEISTER_IMAGE_REPOSITORY` allow overrides.
 
-`CREWMEISTER_IMAGE_MODE=local` forces a build; `registry` requires a published image with no fallback. `CREWMEISTER_IMAGE_TAG` and `CREWMEISTER_IMAGE_REPOSITORY` override selection. No deployment path uses `latest`.
+**Want the detailed diagrams?** See [Technical architecture](docs/architecture.md) for the local Terraform sequence, Helm resource mapping, Kubernetes runtime, image selection, and AWS state flow.
 
 ## CI pipeline
 
-[The workflow](.github/workflows/ci.yml) runs on pull requests targeting `main`, pushes to `main` and manual dispatch. The first three jobs run in parallel; image building waits for all three.
+[The GitHub Actions workflow](.github/workflows/ci.yml) runs for pull requests to `main`, pushes to `main`, and manual dispatch. The test, infrastructure, and secret-scanning jobs run in parallel; image building waits for all three.
 
 ```mermaid
 flowchart LR
@@ -414,7 +296,7 @@ SonarCloud analyses the repository through its own GitHub integration, which nee
 
 ## AWS EKS (optional)
 
-**Reviewers are not expected to deploy AWS.** The local quick start runs the whole assessment without cloud charges. AWS shows the same application and monitoring on a managed cluster, using the published image and the shared Helm chart.
+**Reviewers are not expected to deploy AWS.** The Kind quick start reproduces the complete assessment without cloud charges. AWS is an optional, temporary demonstration of the same application, published image and Helm chart on a managed Kubernetes cluster.
 
 <p align="center">
   <a href="https://youtu.be/O4EGeSubWZ8"><img src="https://img.youtube.com/vi/O4EGeSubWZ8/hqdefault.jpg" width="320" alt="AWS EKS deployment demo on YouTube"></a>
@@ -422,7 +304,7 @@ SonarCloud analyses the repository through its own GitHub integration, which nee
   <sub>▶ <a href="https://youtu.be/O4EGeSubWZ8">Watch the AWS EKS deployment</a></sub>
 </p>
 
-The AWS Terraform roots create a protected state bucket, a dedicated VPC with two public subnets, EKS, one On-Demand `m7i-flex.large` worker, Pod Identity associations, encrypted gp3 storage and the Helm workloads. Public API ingress adds an ALB. There is no NAT gateway. It is a single-node demonstration, so a node replacement or update interrupts every workload.
+The AWS Terraform roots create a protected S3 state bucket, a dedicated VPC with two public subnets, EKS, one On-Demand `m7i-flex.large` worker, Pod Identity associations, encrypted gp3 MySQL storage, and the Helm workloads. Public API ingress uses an ALB; there is no NAT gateway. This single-node setup is a demonstration, **not a high-availability production deployment**.
 
 ```mermaid
 flowchart LR
@@ -441,19 +323,7 @@ flowchart LR
     ghcr[("GHCR image")] --> app
 ```
 
-AWS uses three separate Terraform roots and never reuses the Kind states. Bootstrap keeps its own local state in `.local/aws/`; the cluster and platform roots keep theirs in the protected S3 bucket with native locking.
-
-```mermaid
-flowchart LR
-    boot["terraform/aws/bootstrap"] -->|"creates"| bucket[("Protected S3 bucket")]
-    bucket --> cstate["cluster state"]
-    bucket --> pstate["platform state"]
-    cluster["terraform/aws/cluster"] --> infra["VPC, EKS, node, identity"]
-    cluster --> cstate
-    platform["terraform/aws/platform"] --> work["Storage, ALB controller, workloads"]
-    platform --> pstate
-    cstate -->|"read by"| platform
-```
+The bootstrap state stays local under `.local/aws/`; cluster and platform state live in **separate S3 objects with native locking**. State is isolated from Kind. See [Technical architecture](docs/architecture.md#aws-state-and-dependency-flow) and the [AWS deployment guide](docs/aws-deployment.md) for the full workflow.
 
 **Cost:** about **$0.25 per hour, or $6 per day**, with ingress, before credits, taxes, transfer and extra storage. This is a historical estimate, not a spending cap. Idle pods do not stop infrastructure charges.
 
@@ -469,9 +339,9 @@ flowchart LR
 
 <sub>Click an image to enlarge.</sub>
 
-**Access:** the EKS management endpoint is restricted to the administrator's IP. The API ingress accepts requests from any IPv4 address while the demo runs, and routes exactly `/user`, including query strings. Grafana and Prometheus are not exposed and use localhost port-forwarding. Public HTTP `/user` has no authentication and is meant only for temporary dummy data; health, metrics and monitoring paths return 404 through the ALB.
+**Public access during the demo:** The EKS management endpoint is restricted to the administrator's approved IP. The ALB accepts IPv4 traffic from **any source IP** while the demo is live, but routes only the exact `/user` path (including query strings); other paths, including public Actuator and Grafana endpoints, receive 404. Grafana and Prometheus themselves remain private and are accessed by localhost port-forwarding. **The public API uses unauthenticated HTTP; use dummy data only and limit the exposure window.**
 
-To run it in your own account, use a fresh checkout, your own temporary-credential profile, an account check, an operator role, private configuration and a unique backend bucket. Review costs, eligibility and every Terraform plan first. The [AWS deployment guide](docs/aws-deployment.md) covers setup, verification, monitoring and ordered teardown. Do not reuse someone else's private inputs or state. A full deployment from another account has not been validated.
+The environment is provisioned through temporary AWS credentials, private account-specific configuration and a separately owned S3 backend. For replication, reviewers must use **their own account, credentials, backend bucket and approved Terraform plans**. The [AWS deployment guide](docs/aws-deployment.md) explains setup, verification and the ordered teardown. A full deployment in a second AWS account has not been validated.
 
 ## Design decisions
 
@@ -488,7 +358,7 @@ To run it in your own account, use a fresh checkout, your own temporary-credenti
 
 - **Security scan:** the image scan on 3 November 2026 reported 2 critical findings in `spring-webmvc` 6.2.19 (CVE-2026-47884, CVE-2026-47890), fixed only in Spring Framework 7. They are open; fixing them needs a major Spring Boot upgrade. Details are in [validation evidence](docs/validation.md#critical-findings-unchanged).
 - **Platforms:** tested on Windows 11 with Docker Desktop and on WSL2 Ubuntu. Native Linux, macOS and Apple Silicon are untested, and the published image is `linux/amd64` only.
-- **Scope:** one node, no high availability, no backups. Teardown deletes the MySQL data.
+- **Scope and public exposure:** one node, no high availability or backups. The temporary AWS ALB permits unauthenticated HTTP traffic to `/user` from any IPv4 address while live; dummy data only, with prompt teardown recommended. Teardown deletes the MySQL data.
   
 ## Repository layout
 
@@ -502,7 +372,7 @@ monitoring/                   Shared values, exporter and Grafana dashboard
 scripts/                      PowerShell/Bash lifecycle and verification
 .github/workflows/ci.yml      CI checks and gated GHCR publishing
 src/                          Application, migrations and integration tests
-docs/                         Assessment, validation, AWS guide and screenshots
+docs/                         Assessment, architecture, validation, AWS guide and screenshots
 ```
 
-More detail: the [original assessment](docs/assessment.md), the [validation evidence](docs/validation.md) and the [AWS deployment guide](docs/aws-deployment.md).
+More detail: the [original assessment](docs/assessment.md), [technical architecture](docs/architecture.md), [validation evidence](docs/validation.md), and [AWS deployment guide](docs/aws-deployment.md).
