@@ -33,36 +33,37 @@ resource "aws_iam_role_policy_attachment" "worker" {
   role       = aws_iam_role.worker.name
   policy_arn = "arn:aws:iam::aws:policy/${each.value}"
 }
-resource "aws_iam_openid_connect_provider" "project" {
-  url            = aws_eks_cluster.project.identity[0].oidc[0].issuer
-  client_id_list = ["sts.amazonaws.com"]
-  # IAM retrieves the issuer CA thumbprint; no obsolete hardcoded thumbprint.
-}
 locals {
-  oidc_host = replace(aws_iam_openid_connect_provider.project.url, "https://", "")
   service_accounts = {
-    cni = "system:serviceaccount:kube-system:aws-node"
-    ebs = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
-    alb = "system:serviceaccount:kube-system:aws-load-balancer-controller"
+    cni = "aws-node"
+    ebs = "ebs-csi-controller-sa"
+    alb = "aws-load-balancer-controller"
   }
 }
 data "aws_iam_policy_document" "workload_trust" {
   for_each = local.service_accounts
   statement {
-    actions = ["sts:AssumeRoleWithWebIdentity"]
+    actions = ["sts:AssumeRole", "sts:TagSession"]
     principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.project.arn]
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"]
     }
     condition {
       test     = "StringEquals"
-      variable = "${local.oidc_host}:sub"
+      variable = "aws:RequestTag/kubernetes-service-account"
       values   = [each.value]
     }
     condition {
       test     = "StringEquals"
-      variable = "${local.oidc_host}:aud"
-      values   = ["sts.amazonaws.com"]
+      variable = "aws:RequestTag/kubernetes-namespace"
+      values   = ["kube-system"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/eks-cluster-arn"
+      # This ARN is stable across endpoint updates; keep trust policies known
+      # during planning rather than rewriting all roles when the API IP changes.
+      values = ["arn:aws:eks:${var.aws_region}:${var.expected_account_id}:cluster/${var.cluster_name}"]
     }
   }
 }
@@ -77,7 +78,14 @@ resource "aws_iam_role_policy_attachment" "cni" {
 }
 resource "aws_iam_role_policy_attachment" "ebs" {
   role       = aws_iam_role.workload["ebs"].name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEBSCSIDriverPolicyV2"
+}
+resource "aws_eks_pod_identity_association" "alb" {
+  cluster_name    = aws_eks_cluster.project.name
+  namespace       = "kube-system"
+  service_account = local.service_accounts.alb
+  role_arn        = aws_iam_role.workload["alb"].arn
+  depends_on      = [aws_eks_addon.pod_identity, aws_iam_role_policy_attachment.alb]
 }
 resource "aws_iam_policy" "alb" {
   name   = "${var.cluster_name}-alb"

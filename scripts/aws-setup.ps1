@@ -25,6 +25,7 @@ if ($Mode -eq 'Guard') {
         $cluster = Assert-AwsCluster
         Assert-AwsKubeconfig $cluster
         $null = Invoke-AwsKube @('--namespace','kube-system','rollout','status','deployment/ebs-csi-controller','--timeout=180s')
+        $null = Invoke-AwsKube @('--namespace','kube-system','rollout','status','daemonset/eks-pod-identity-agent','--timeout=180s')
     }
     Write-Host "Identity and $Stage prerequisites checked. No Terraform operation was performed; review the separate plan and obtain approval."
     return

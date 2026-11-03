@@ -18,9 +18,6 @@ resource "helm_release" "load_balancer_controller" {
     serviceAccount = {
       create = true
       name   = "aws-load-balancer-controller"
-      annotations = {
-        "eks.amazonaws.com/role-arn" = data.terraform_remote_state.cluster.outputs.alb_role_arn
-      }
     }
     resources = {
       requests = { cpu = "50m", memory = "128Mi" }

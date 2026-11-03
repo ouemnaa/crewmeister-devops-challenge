@@ -97,13 +97,24 @@ resource "aws_eks_node_group" "worker" {
   ]
 }
 resource "aws_eks_addon" "vpc_cni" {
-  cluster_name                = aws_eks_cluster.project.name
-  addon_name                  = "vpc-cni"
-  addon_version               = "v1.22.4-eksbuild.10"
-  service_account_role_arn    = aws_iam_role.workload["cni"].arn
+  cluster_name  = aws_eks_cluster.project.name
+  addon_name    = "vpc-cni"
+  addon_version = "v1.22.4-eksbuild.10"
+  pod_identity_association {
+    role_arn        = aws_iam_role.workload["cni"].arn
+    service_account = local.service_accounts.cni
+  }
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
-  depends_on                  = [aws_iam_role_policy_attachment.cni]
+  depends_on                  = [aws_eks_addon.pod_identity, aws_iam_role_policy_attachment.cni]
+}
+resource "aws_eks_addon" "pod_identity" {
+  cluster_name                = aws_eks_cluster.project.name
+  addon_name                  = "eks-pod-identity-agent"
+  addon_version               = "v1.4.1-eksbuild.3"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "PRESERVE"
+  depends_on                  = [aws_iam_role_policy_attachment.worker]
 }
 resource "aws_eks_addon" "core" {
   for_each = {

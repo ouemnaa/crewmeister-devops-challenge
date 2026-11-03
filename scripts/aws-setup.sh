@@ -23,7 +23,8 @@ if [[ "$aws_mode" == guard ]]; then
         cluster) aws_backend ;;
         platform)
             aws_backend; aws_cluster; aws_check_kubeconfig
-            aws_kube --namespace kube-system rollout status deployment/ebs-csi-controller --timeout=180s ;;
+            aws_kube --namespace kube-system rollout status deployment/ebs-csi-controller --timeout=180s
+            aws_kube --namespace kube-system rollout status daemonset/eks-pod-identity-agent --timeout=180s ;;
         *) aws_fail 'Stage must be bootstrap, cluster or platform.' ;;
     esac
     echo "Identity and $aws_stage prerequisites checked. No Terraform operation performed; review the separate plan and obtain approval."
