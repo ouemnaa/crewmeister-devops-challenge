@@ -53,32 +53,62 @@ flowchart LR
 | GitHub CI | [.github/workflows/ci.yml](.github/workflows/ci.yml): tests, validation, scans, gated image publishing | [CI pipeline](#ci-pipeline) |
 | Monitoring | [monitoring](monitoring): Prometheus, MySQL exporter and provisioned Grafana dashboard | [Open monitoring](#3-open-monitoring) |
 
-## Quick start (local)
+## Quick Start — Local Kubernetes
 
-**You need:** Docker (Linux containers, at least 4 CPUs and 6 GiB RAM), plus Terraform, Kind, kubectl and Helm. The first run takes about **11 minutes** on Windows.
+Run the complete Crewmeister stack locally using **Kind, Terraform, and Helm**. The setup provisions a Kubernetes cluster and deploys the Spring Boot application, MySQL, Prometheus, and Grafana.
 
-**Tested on:** Windows 11 with Docker Desktop, and WSL2 Ubuntu. Native Linux, macOS and Apple Silicon are untested. Run setup, verification and teardown from the same environment (don't mix Windows and WSL on one checkout).
+### Prerequisites
 
-| Tool | Version |
-| --- | --- |
-| Docker | Engine 28.0.4 tested |
-| Terraform | 1.15.8 (enforced by setup) |
-| Kind | 0.33.0 (enforced by setup) |
-| kubectl | 1.35 to 1.37 (1.36.4 tested) |
+- **Docker:** Linux containers enabled, with at least 4 CPUs and 6 GiB RAM allocated.
+- **CLI tools:** Terraform, Kind, kubectl, and Helm installed and available on `PATH`.
+- **Shell:** PowerShell 5.1+ (Windows) or Bash 5.1+ (Linux/WSL).
+
+The first deployment takes approximately **11 minutes on Windows**.
+
+| Tool | Required / tested version |
+|---|---|
+| Docker Engine | 28.0.4 tested |
+| Terraform | 1.15.8 (enforced) |
+| Kind | 0.33.0 (enforced) |
+| kubectl | 1.35–1.37 (1.36.4 tested) |
 | Helm | 4.3.1 |
-| Shell | PowerShell 5.1+, or Bash 5.1+ with curl 7.81+ |
+| curl | 7.81+ (Bash setup) |
 
-Local ports used: API **18080**, Grafana **13000**, Prometheus **19090**. If one is taken, change the number before the colon in the port-forward command.
+### Platform Compatibility
+
+| Environment | Status |
+|---|---|
+| Windows 11 + Docker Desktop | ✅ Tested |
+| Ubuntu on WSL2 + Docker Desktop | ✅ Tested |
+| Native Linux | Not yet tested |
+| macOS / Apple Silicon | Not yet tested |
+
+> **Important:** Run setup, verification, and teardown from the same environment. Avoid switching between Windows and WSL within the same checkout.
+
+### Local Access
+
+Once deployed, the services are accessible through localhost port-forwarding.
+
+| Service | Local address |
+|---|---|
+| Spring Boot API | `http://localhost:18080` |
+| Grafana | `http://localhost:13000` |
+| Prometheus | `http://localhost:19090` |
+
+If a port is already in use, change the local port number (before the colon) in the corresponding `kubectl port-forward` command.
 
 <details>
-<summary>More notes on requirements</summary>
+<summary>Additional requirements and technical notes</summary>
 
-- Put the binaries for your OS and CPU on `PATH`. Git 2.x is needed to clone.
-- No host JDK is needed: Docker builds the image with Java 17.
-- Docker needs access to GitHub, Maven Central, chart repositories and container registries. 8 GiB of RAM leaves more room during local image builds.
-- Prefer cgroup v2. When needed, setup enables Kubernetes' cgroup-v1 compatibility setting, without changing the host.
-- MySQL (3306) and its exporter (9104) are internal only. The Kind API uses a random localhost port.
-- WSL needs Docker Desktop integration enabled.
+- **Git 2.x** is required to clone the repository.
+- Install CLI binaries compatible with your operating system and CPU architecture.
+- **Java installation is not required locally.** The Docker build uses Java 17.
+- Docker needs internet access to GitHub, Maven Central, Helm chart repositories, and container registries.
+- **8 GiB of RAM is recommended** for additional headroom during image builds.
+- **cgroup v2** is preferred. When needed, the setup enables Kubernetes' cgroup-v1 compatibility setting without modifying the host.
+- MySQL (port 3306) and MySQL Exporter (port 9104) remain internal to Kubernetes.
+- The Kind Kubernetes API uses a dynamically assigned localhost port.
+- For WSL2, Docker Desktop's WSL integration must be enabled.
 
 </details>
 
