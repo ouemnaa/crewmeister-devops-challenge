@@ -58,7 +58,7 @@ Allocate at least 4 CPUs and 6 GiB RAM to Docker; 8 GiB is more comfortable duri
 flowchart LR
     setup[Setup script] --> cluster[Terraform: cluster]
     cluster --> kind[Kind: Kubernetes 1.36.4]
-    setup --> image[Pull or build image; load into Kind]
+    setup --> image[Choose published image or build locally]
     image --> platform[Terraform: platform]
     platform --> mysql[Helm: MySQL + 2 GiB PVC]
     platform --> app[Helm: Spring Boot API]
@@ -82,7 +82,7 @@ Monitoring probes allow startup time on a busy machine. Grafana's [optional plug
 
 ## Image delivery
 
-Setup tries `ghcr.io/ouemnaa/crewmeister-devops-challenge:<full-commit-SHA>` for the checkout. If unavailable, or build inputs have changes, it builds locally and loads the image into Kind. Local tags derive from source contents and use pull policy `Never`.
+Setup checks `ghcr.io/ouemnaa/crewmeister-devops-challenge:<full-commit-SHA>` for the checkout. When available, Kubernetes pulls the published image directly from GHCR with pull policy `IfNotPresent`. If unavailable, or build inputs have changes, setup builds locally and loads that image into Kind. Local tags derive from source contents and use pull policy `Never`. Only locally built images go through Kind's Docker archive import.
 
 ```powershell
 # Force local build:
@@ -205,6 +205,7 @@ bash ./mvnw --batch-mode clean verify
 - **Missing tool:** install the pinned version, add it to `PATH` and reopen the terminal. WSL needs Linux binaries and Docker integration.
 - **Kind cannot start:** check Linux containers, available RAM and `docker info`. Setup reports cgroup-v1 compatibility explicitly.
 - **Registry unavailable:** set `CREWMEISTER_IMAGE_MODE=local`; check access to Maven Central and base images.
+- **Kind import reports a missing content digest:** published images should be pulled directly by Kubernetes; update the scripts if an older version tries to import a registry image. Preserve the existing Terraform state and rerun setup. Docker archive export can omit content that Kind needs even when the registry has a valid image.
 - **Release timeout:** inspect `kubectl --kubeconfig .local/crewmeister.kubeconfig --context kind-crewmeister -n crewmeister get pods,events` and pod logs. Preserve state, resolve the cause and rerun setup.
 - **Port conflict:** the `:PORT` forwarding form allocates a free host port. Keep kubectl running.
 - **Changed credentials:** an existing MySQL volume retains its password. Keep generated credentials/state together; rotate the database account with its secret.

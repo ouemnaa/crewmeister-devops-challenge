@@ -36,6 +36,7 @@ try {
 
     if ($useRegistry) {
         $pullPolicy = 'IfNotPresent'
+        Write-Host 'Published image available. Kubernetes will pull it directly from the registry.'
     } else {
         Write-Host 'Building the current checkout locally and loading it into Kind.'
         $files = @(Invoke-Checked git (@('ls-files', '--cached', '--others', '--exclude-standard', '--') + $sourcePaths))
@@ -54,9 +55,9 @@ try {
         $tag = "local-$sourceHash"
         $pullPolicy = 'Never'
         Invoke-Checked docker @('build', '--tag', "${repository}:$tag", '.')
+        Invoke-Checked kind @('load', 'docker-image', "${repository}:$tag", '--name', 'crewmeister')
     }
 
-    Invoke-Checked kind @('load', 'docker-image', "${repository}:$tag", '--name', 'crewmeister')
     $configuration = @{
         image_repository = $repository
         image_tag = $tag

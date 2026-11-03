@@ -32,6 +32,7 @@ fi
 
 if [[ "$use_registry" == true ]]; then
     pull_policy=IfNotPresent
+    echo 'Published image available. Kubernetes will pull it directly from the registry.'
 else
     echo 'Building the current checkout locally and loading it into Kind.'
     source_files="$(git ls-files --cached --others --exclude-standard -- "${source_paths[@]}")"
@@ -45,9 +46,9 @@ else
     tag="local-$source_hash"
     pull_policy=Never
     docker build --tag "$repository:$tag" .
+    kind load docker-image "$repository:$tag" --name crewmeister
 fi
 
-kind load docker-image "$repository:$tag" --name crewmeister
 printf '{"image_repository":"%s","image_tag":"%s","image_pull_policy":"%s"}\n' \
     "$repository" "$tag" "$pull_policy" >.local/image.auto.tfvars.json
 echo "Image ready: $repository:$tag ($pull_policy)"

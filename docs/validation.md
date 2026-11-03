@@ -27,3 +27,16 @@ Native Linux teardown then destroyed all 11 platform resources and the Kind clus
 The [hosted CI run for d078fce](https://github.com/ouemnaa/crewmeister-devops-challenge/actions/runs/41517004402) passed tests, infrastructure validation, image scanning, GHCR publishing and anonymous package access. Later local commits require a push to receive hosted validation. No claim is made that the newer workflow has already run on GitHub.
 
 SonarCloud is conditional on repository configuration and credentials; no live SonarCloud analysis was performed. macOS instructions are supplied, but a native macOS machine was not available for execution. A production rollout, cloud infrastructure and production security certification are outside this local assessment.
+
+## Published-image regression, 2026-11-03
+
+The initial end-to-end deployment checks used locally built images. After commit `411b8e2` was published, the registry path exposed a separate Docker-to-Kind import failure on Windows. The published image's configuration blob existed in GHCR, but the host's `docker image save` archive omitted it. Kind's import then failed with `content digest ... not found`. Cluster creation had succeeded; the cgroup-v1 warning was unrelated to the import failure.
+
+Published images now use Kubernetes' direct registry pull with `IfNotPresent`. Only locally built images are imported through Kind. Validation covered:
+
+- PowerShell and Git Bash registry selection using the published `411b8e2` image.
+- Native Linux Bash registry selection under WSL.
+- A temporary Kubernetes pod pulling that exact GHCR image with `IfNotPresent` and successfully running Java 17, exit code 0.
+- PowerShell and Git Bash local builds and Kind loading, preserving pull policy `Never`.
+
+The diagnostic pod was removed. The existing project cluster and Terraform state were retained for the interactive setup walkthrough. This regression check validates image delivery; it does not represent another full platform deployment.
