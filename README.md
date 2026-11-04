@@ -35,11 +35,30 @@ flowchart LR
     ghcr --> app2
 ```
 
+
+### 🎬 AWS EKS Deployment Demo
+
+Watch the application running on Amazon EKS, including Kubernetes workloads,
+persistent MySQL storage, Prometheus, Grafana, and API verification.
+
 <p align="center">
-  <a href="https://youtu.be/O4EGeSubWZ8"><img src="https://img.youtube.com/vi/O4EGeSubWZ8/hqdefault.jpg" width="360" alt="AWS EKS deployment demo on YouTube"></a>
-  <br>
-  <sub>▶ <a href="https://youtu.be/O4EGeSubWZ8">Watch the AWS EKS deployment on YouTube</a></sub>
+  <a href="https://youtu.be/O4EGeSubWZ8">
+    <img
+      src="https://img.youtube.com/vi/O4EGeSubWZ8/hqdefault.jpg"
+      alt="Watch the Crewmeister AWS EKS deployment demo"
+      width="560"
+    />
+  </a>
 </p>
+
+<p align="center">
+  <strong>
+    <a href="https://youtu.be/O4EGeSubWZ8">
+      ▶ Watch the AWS EKS Deployment Walkthrough
+    </a>
+  </strong>
+</p>
+
 
 ## Requirements and where they are
 
